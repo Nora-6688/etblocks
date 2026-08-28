@@ -99,7 +99,10 @@ function movePaperQuestion(idx: number, dir: -1 | 1) {
   const arr = selectedPaper.value.questions
   const target = idx + dir
   if (target < 0 || target >= arr.length) return
-  ;[arr[idx], arr[target]] = [arr[target], arr[idx]]
+  const a = arr[idx]!
+  const b = arr[target]!
+  arr[idx] = b
+  arr[target] = a
 }
 const paperTotalScore = computed(() => {
   if (!selectedPaper.value) return 0
@@ -202,7 +205,10 @@ function handleExcelUpload(file: { raw: File }) {
     try {
       const data = new Uint8Array(e.target!.result as ArrayBuffer)
       const wb = XLSX.read(data, { type: 'array' })
-      const ws = wb.Sheets[wb.SheetNames[0]]
+      const sheetName = wb.SheetNames[0]
+      if (!sheetName) { ElMessage.warning('文件中没有工作表'); return }
+      const ws = wb.Sheets[sheetName]
+      if (!ws) { ElMessage.warning('工作表为空'); return }
       const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' })
       if (!rows.length) { ElMessage.warning('文件中没有数据'); return }
       excelPreviewData.value = { rows, valid: true }
@@ -282,7 +288,7 @@ function removeQuestion(question: Question) {
 function createPaper() { paperEditorVisible.value = true }
 function savePaper() {
   if (!newPaperName.value.trim()) { ElMessage.warning('请输入试卷名称'); return }
-  papers.value.unshift({ id: Date.now(), name: newPaperName.value, audience: newPaperAudience.value, count: 0, pass: newPaperPass.value, duration: newPaperDuration.value, status: '草稿' })
+  papers.value.unshift({ id: Date.now(), name: newPaperName.value, audience: newPaperAudience.value, count: 0, pass: newPaperPass.value, duration: newPaperDuration.value, status: '草稿', questions: [] })
   newPaperName.value = ''
   paperEditorVisible.value = false
   ElMessage.success('试卷已创建')

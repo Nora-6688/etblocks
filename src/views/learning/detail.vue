@@ -3,13 +3,28 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useCourseStore, type CourseCategory } from '@/stores/course'
+import { useTodoStore } from '@/stores/todo'
 
 const route = useRoute()
 const router = useRouter()
 const store = useCourseStore()
+const todoStore = useTodoStore()
 const course = computed(() => store.getCourseById(String(route.params.id)))
 
 const activeTab = ref<'intro' | 'catalog' | 'comments'>('intro')
+
+/** 来源：从待学进来的 → from=todo；从 Blocks 详情进来的 → from=block:xxx */
+const from = computed(() => String(route.query.from ?? ''))
+const backLabel = computed(() => {
+  if (from.value === 'todo') return '← 返回待学内容'
+  if (from.value.startsWith('block:')) return '← 返回 Blocks'
+  return '← 返回学习列表'
+})
+const isInTodo = computed(
+  () => course.value && todoStore.hasTodo('course', course.value.id),
+)
+/** 是否从 Blocks 详情点进来的——这种"包内课程"已经在 Block 里了，单课不能再加入待学 */
+const isFromBlock = computed(() => from.value.startsWith('block:'))
 
 const categoryColors: Record<CourseCategory, string> = {
   企业文化: '#185fa5',
@@ -22,7 +37,7 @@ const categoryColors: Record<CourseCategory, string> = {
 function startLearning() {
   if (!course.value) return
   if (course.value.type === '视频' && course.value.contentUrl) {
-    router.push(`/course/play/${course.value.id}`)
+    router.push({ path: `/course/play/${course.value.id}`, query: route.query })
   } else if (course.value.contentUrl) {
     window.open(course.value.contentUrl, '_blank')
   } else {
@@ -31,20 +46,30 @@ function startLearning() {
 }
 
 function goBack() {
-  router.push('/learning')
+  if (from.value === 'todo') router.push('/todo')
+  else if (from.value.startsWith('block:')) router.push(`/block/${from.value.slice(6)}`)
+  else router.push('/learning')
 }
 
 function addToTodo() {
-  if (course.value) {
-    ElMessage.success(`已将《${course.value.name}》加入待学内容`)
-  }
+  if (!course.value) return
+  const ok = todoStore.addTodo({
+    sourceType: 'course',
+    sourceId: course.value.id,
+    title: course.value.name,
+    meta: `${course.value.type} · ${course.value.duration}`,
+    type: '课程',
+    coverColor: categoryColors[course.value.category],
+  })
+  if (ok) ElMessage.success(`已将《${course.value.name}》加入待学内容`)
+  else ElMessage.warning(`《${course.value.name}》已在待学列表中`)
 }
 </script>
 
 <template>
   <div v-if="course" class="course-detail">
     <div class="detail-nav">
-      <button @click="goBack">← 返回学习列表</button>
+      <button @click="goBack">{{ backLabel }}</button>
     </div>
     <div class="detail-header">
       <div class="cover" :style="{ background: categoryColors[course.category] }">
@@ -69,7 +94,11 @@ function addToTodo() {
           <el-button type="primary" size="large" @click="startLearning">
             {{ course.type === '视频' ? '▶ 开始学习' : '查看课程内容' }}
           </el-button>
-          <el-button size="large" @click="addToTodo">＋ 加入待学</el-button>
+          <!-- 仅当不是从 Blocks 包点进来、且单课未在待学时，才显示加入待学 -->
+          <el-button v-if="!isFromBlock && !isInTodo" size="large" @click="addToTodo">＋ 加入待学</el-button>
+          <el-button v-else-if="!isFromBlock" size="large" disabled>✓ 已在待学</el-button>
+          <!-- Blocks 包内的课程：直接展示所在 Blocks 的提示，不再有加入待学入口 -->
+          <span v-else class="in-block-tip">已包含在 Blocks 包中</span>
         </div>
       </div>
     </div>
@@ -169,7 +198,8 @@ function addToTodo() {
 .desc { color: var(--muted); font-size: 13px; line-height: 1.7; margin-bottom: 14px; }
 .meta-row { display: flex; gap: 20px; margin-bottom: 18px; }
 .meta-row span { color: var(--muted); font-size: 12px; }
-.action-row { display: flex; gap: 10px; }
+.action-row { display: flex; gap: 10px; align-items: center; }
+.in-block-tip { font-size: 12px; color: var(--muted); padding: 0 6px; }
 .tab-bar { display: flex; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
 .tab-bar button { padding: 12px 20px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; }
 .tab-bar button.active { border-bottom-color: var(--teal); color: var(--teal); font-weight: 600; }

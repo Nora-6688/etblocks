@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useCourseStore, type CourseCategory } from '@/stores/course'
+import { useTodoStore } from '@/stores/todo'
+import { useHistoryStore } from '@/stores/history'
+import { useNotificationStore } from '@/stores/notification'
 
 const route = useRoute()
 const router = useRouter()
 const store = useCourseStore()
+const todoStore = useTodoStore()
+const historyStore = useHistoryStore()
+const notificationStore = useNotificationStore()
 const course = computed(() => store.getCourseById(String(route.params.id)))
 
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -111,8 +118,45 @@ function onKey(e: KeyboardEvent) {
 onMounted(() => { window.addEventListener('keydown', onKey) })
 onUnmounted(() => { window.removeEventListener('keydown', onKey) })
 
-function goBack() { router.push(`/course/${route.params.id}`) }
+function goBack() {
+  router.push({ path: `/course/${route.params.id}`, query: route.query })
+}
 function goLearning() { router.push('/learning') }
+
+/** 学习完成：从历史归档、并从待学移除，回到课程首页，再由课程首页返回待学 */
+function finishLearning() {
+  if (!course.value) return
+  ElMessageBox.confirm(
+    `确认已完成《${course.value.name}》的学习？完成后将从待学列表移除。`,
+    '学习完成',
+    {
+      confirmButtonText: '确认完成',
+      cancelButtonText: '还没学完',
+      type: 'success',
+    },
+  )
+    .then(() => {
+      const fromSource = String(route.query.from ?? '')
+      const source = fromSource.startsWith('block:') ? fromSource : 'todo'
+      historyStore.finishCourse(
+        {
+          courseId: course.value!.id,
+          courseName: course.value!.name,
+          duration: course.value!.duration,
+        },
+        todoStore,
+        source,
+      )
+      notificationStore.push({
+        kind: '学习',
+        title: `已学完《${course.value!.name}》`,
+        body: '可在「个人中心 - 学习记录」查看历史。',
+      })
+      ElMessage.success('学习完成，已从待学列表移除')
+      router.push({ path: `/course/${route.params.id}`, query: route.query })
+    })
+    .catch(() => {})
+}
 </script>
 
 <template>
@@ -123,7 +167,10 @@ function goLearning() { router.push('/learning') }
         <b>{{ course.name }}</b>
         <span>{{ course.category }} · {{ course.difficulty }} · {{ course.duration }}</span>
       </div>
-      <button @click="goLearning">学习列表</button>
+      <div class="header-actions">
+        <button class="finish-btn" @click="finishLearning">✓ 学习完成</button>
+        <button @click="goLearning">学习列表</button>
+      </div>
     </div>
     <div class="player-container" :style="{ background: categoryColors[course.category] }">
       <video
@@ -226,6 +273,8 @@ function goLearning() { router.push('/learning') }
 .play-page { max-width: 1200px; margin: 0 auto; }
 .play-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .play-header button { border: 0; background: transparent; color: var(--teal); cursor: pointer; font-size: 13px; white-space: nowrap; }
+.header-actions { display: flex; align-items: center; gap: 14px; }
+.finish-btn { border: 1px solid var(--teal) !important; border-radius: 6px; background: var(--teal) !important; color: #fff !important; padding: 7px 12px; }
 .header-info { text-align: center; }
 .header-info b { display: block; font-size: 17px; }
 .header-info span { color: var(--muted); font-size: 12px; }

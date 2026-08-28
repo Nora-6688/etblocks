@@ -1,36 +1,32 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-const items = ref([
-  {
-    title: '完成课后练习：客户需求洞察',
-    meta: '练习题 · 5 道题',
-    due: '今天到期',
-    type: '训练',
-    state: '进行中',
-    progress: 60,
-  },
-  {
-    title: '商务谈判基础',
-    meta: '课程 · 35 分钟',
-    due: '明天到期',
-    type: '课程',
-    state: '未开始',
-    progress: 0,
-  },
-  {
-    title: 'Q3 新人培训 Blocks',
-    meta: '管理员指派 · 6 个单元',
-    due: '2026.08.28',
-    type: 'Blocks',
-    state: '未开始',
-    progress: 0,
-  },
-])
-function openItem(item: { title: string }) {
+import { useTodoStore } from '@/stores/todo'
+
+const router = useRouter()
+const todoStore = useTodoStore()
+
+// 让 Vue 把 store 数据当 ref 用，computed 才会响应
+const items = computed(() => todoStore.items)
+const unfinishedCount = computed(() => todoStore.unfinishedCount)
+
+function openItem(item: (typeof items.value)[number]) {
+  // 课程类：先进课程首页（详情页），再进播放页；标注来源是待学，方便原路返回
+  if (item.sourceType === 'course') {
+    router.push({ path: `/course/${item.sourceId}`, query: { from: 'todo' } })
+    return
+  }
+  // Blocks：进入 Blocks 详情页，在详情里选择内容逐一学习
+  if (item.sourceType === 'block') {
+    router.push(`/block/${item.sourceId}`)
+    return
+  }
+  // 训练 / 指派：暂用提示，后续 Phase 4 接后端时补真正的答题页
   ElMessage.info(`正在打开：${item.title}`)
 }
 </script>
+
 <template>
   <section class="page-heading">
     <div>
@@ -38,33 +34,44 @@ function openItem(item: { title: string }) {
       <h1>待学内容</h1>
       <p>你的学习队列，有计划地完成每一次成长。</p>
     </div>
-    <strong class="queue-number">3 <small>项待完成</small></strong>
+    <strong class="queue-number"
+      >{{ unfinishedCount }} <small>项待完成</small></strong
+    >
   </section>
-  <div class="notice">
-    <span>♧</span>
-    <div>
-      <b>你有 1 个新的学习指派</b>
-      <p>「Q3 新人培训 Blocks」由培训管理员指派给你，请在本周内完成。</p>
-    </div>
+  <div v-if="items.length === 0" class="empty-queue">
+    <p>暂无待学内容</p>
+    <small>去「学习列表」添加课程或 Blocks 开始学习吧。</small>
   </div>
-  <div class="todo-list">
-    <div v-for="item in items" :key="item.title" class="todo-item">
-      <div class="todo-type">{{ item.type }}</div>
-      <div class="todo-main">
-        <h2>{{ item.title }}</h2>
-        <p>{{ item.meta }}</p>
-        <div v-if="item.progress" class="progress">
-          <i :style="{ width: item.progress + '%' }"></i>
+  <template v-else>
+    <div v-if="items[0] && items[0].sourceType === 'assignment'" class="notice">
+      <span>♧</span>
+      <div>
+        <b>你有 1 个新的学习指派</b>
+        <p>「{{ items[0].title }}」由培训管理员指派给你，请在本周内完成。</p>
+      </div>
+    </div>
+    <div class="todo-list">
+      <div v-for="item in items" :key="item.id" class="todo-item">
+        <div class="todo-type" :style="{ background: item.coverColor + '20', color: item.coverColor }">
+          {{ item.type }}
         </div>
+        <div class="todo-main">
+          <h2>{{ item.title }}</h2>
+          <p>{{ item.meta }}</p>
+          <div v-if="item.progress" class="progress">
+            <i :style="{ width: item.progress + '%', background: item.coverColor }"></i>
+          </div>
+        </div>
+        <div class="todo-due">
+          <span :class="{ urgent: item.due.includes('今天') }">{{ item.due }}</span
+          ><small>{{ item.state }}</small>
+        </div>
+        <button @click="openItem(item)">{{ item.progress ? '继续学习' : '开始学习' }} →</button>
       </div>
-      <div class="todo-due">
-        <span :class="{ urgent: item.due.includes('今天') }">{{ item.due }}</span
-        ><small>{{ item.state }}</small>
-      </div>
-      <button @click="openItem(item)">{{ item.progress ? '继续学习' : '开始学习' }} →</button>
     </div>
-  </div>
+  </template>
 </template>
+
 <style scoped>
 .page-heading {
   display: flex;
@@ -115,6 +122,20 @@ function openItem(item: { title: string }) {
   color: var(--muted);
   font-size: 12px;
   margin-top: 3px;
+}
+.empty-queue {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--muted);
+  background: #fff;
+  border: 1px dashed var(--line);
+}
+.empty-queue p {
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.empty-queue small {
+  font-size: 12px;
 }
 .todo-list {
   background: var(--paper);

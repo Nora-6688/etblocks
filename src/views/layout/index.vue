@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { useTodoStore } from '@/stores/todo'
 
 const route = useRoute()
 const router = useRouter()
+const todoStore = useTodoStore()
 const user = ref(
   JSON.parse(sessionStorage.getItem('etblocks-user') ?? '{"name":"Nora","role":"学员"}'),
 )
@@ -13,7 +15,7 @@ const navGroups = [
     items: [
       { name: '工作台', path: '/blocks', icon: '⌂' },
       { name: '学习列表', path: '/learning', icon: '▦' },
-      { name: '待学内容', path: '/todo', icon: '◷', badge: '3' },
+      { name: '待学内容', path: '/todo', icon: '◷', badge: true },
       { name: '课后训练', path: '/training', icon: '✓' },
       { name: '个人中心', path: '/profile', icon: '♙' },
     ],
@@ -47,7 +49,9 @@ function logout() {
           <RouterLink v-for="item in group.items" :key="item.path" :to="item.path" class="nav-item"
             ><span class="nav-icon">{{ item.icon }}</span
             ><span class="nav-text">{{ item.name }}</span
-            ><b v-if="item.badge" class="nav-badge">{{ item.badge }}</b></RouterLink
+            ><b v-if="item.badge && todoStore.unfinishedCount" class="nav-badge">{{
+              todoStore.unfinishedCount
+            }}</b></RouterLink
           >
         </div>
       </nav>

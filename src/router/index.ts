@@ -36,6 +36,11 @@ const router = createRouter({
           name: 'course-play',
           component: () => import('@/views/learning/play.vue'),
         },
+        {
+          path: 'block/:id',
+          name: 'block-detail',
+          component: () => import('@/views/learning/block-detail.vue'),
+        },
         { path: 'todo', name: 'todo', component: () => import('@/views/todo/index.vue') },
         {
           path: 'training',

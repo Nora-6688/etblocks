@@ -26,6 +26,29 @@ const filteredCourses = computed(() => store.courses.filter((course) => course.n
 
 function departmentMark(department: CourseDepartment) { return department === '共享课程' ? '共' : department === '业务部' ? '业' : department === '客服部' ? '客' : department === '商务部' ? '商' : department === '产品部' ? '产' : '职' }
 
+/** 根据文件扩展名返回图标和标签 */
+const fileMeta = computed(() => {
+  const name = contentFileName.value
+  if (!name) return { icon: '📄', label: '文件' }
+  const ext = name.split('.').pop()?.toLowerCase() || ''
+  if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) return { icon: '🎬', label: '视频' }
+  if (['pdf'].includes(ext)) return { icon: '📕', label: 'PDF' }
+  if (['ppt', 'pptx'].includes(ext)) return { icon: '📊', label: 'PPT' }
+  if (['xls', 'xlsx'].includes(ext)) return { icon: '📈', label: '表格' }
+  if (['doc', 'docx'].includes(ext)) return { icon: '📝', label: '文档' }
+  return { icon: '📄', label: '文件' }
+})
+
+/** 显示给用户看的文件大小（演示用：随机估算，避免读取 File 对象） */
+const fileSizeText = computed(() => {
+  if (!contentFileName.value) return ''
+  // 简单基于文件名长度做演示，真实场景应读取 File.size
+  const seed = contentFileName.value.length * 137
+  const kb = (seed % 9000) + 200
+  if (kb > 1024) return `${(kb / 1024).toFixed(1)} MB`
+  return `${kb} KB`
+})
+
 function openCreate() {
   editingCourse.value = null
   editingName.value = ''
@@ -72,6 +95,11 @@ function selectContent(event: Event) {
   }
 }
 
+function removeContent() {
+  contentFileName.value = ''
+  contentUrl.value = ''
+}
+
 function saveCourse() {
   if (!editingName.value.trim()) {
     ElMessage.warning('请输入课程名称')
@@ -111,7 +139,7 @@ function reset() { keyword.value = ''; activeDepartment.value = '全部'; conten
   <div class="department-tabs"><button v-for="item in departments" :key="item" :class="{ active: activeDepartment === item }" @click="activeDepartment = item">{{ item }}</button></div>
   <div class="filter-bar"><el-input v-model="keyword" placeholder="课程名称..." clearable /><el-select v-model="contentType"><el-option label="全部类型" value="全部类型" /><el-option label="文档" value="文档" /><el-option label="表格" value="表格" /><el-option label="PPT" value="PPT" /><el-option label="PDF" value="PDF" /><el-option label="视频" value="视频" /></el-select><el-select v-model="category"><el-option label="全部分类" value="全部分类" /><el-option label="规章制度" value="规章制度" /><el-option label="企业文化" value="企业文化" /><el-option label="工作流程" value="工作流程" /><el-option label="行业知识" value="行业知识" /><el-option label="岗位知识" value="岗位知识" /></el-select><el-button @click="reset">重置</el-button></div>
   <div class="table-wrap"><table><thead><tr><th>课程名称</th><th>分类</th><th>所属部门</th><th>类型</th><th>难度</th><th>创建人</th><th>封面图</th><th>操作</th></tr></thead><tbody><tr v-for="course in filteredCourses" :key="course.id"><td class="course-name">{{ course.name }}</td><td><span class="category-tag" :class="course.category">{{ course.category }}</span></td><td><span class="department-cell"><i :class="course.department">{{ departmentMark(course.department) }}</i>{{ course.department }}</span></td><td>{{ course.type }}</td><td>{{ course.difficulty }}</td><td>{{ course.creator }}</td><td><span class="cover-tag" :class="{ has: course.coverUrl }">{{ course.coverUrl ? '已设置' : '默认色' }}</span></td><td class="actions"><button @click="openEdit(course)">编辑</button><button class="delete" @click="removeCourse(course)">删除</button></td></tr><tr v-if="!filteredCourses.length"><td colspan="8" class="empty">暂无匹配课程</td></tr></tbody></table></div>
-  <el-dialog v-model="dialogVisible" :title="editingCourse ? '编辑课程' : '上传课程'" width="780px" class="course-dialog"><el-form label-position="top"><div class="form-grid"><el-form-item label="课程名称"><el-input v-model="editingName" placeholder="请输入课程名称" /></el-form-item><el-form-item label="内容分类（决定封面颜色）"><el-select v-model="editingCategory"><el-option label="规章制度" value="规章制度"/><el-option label="企业文化" value="企业文化"/><el-option label="工作流程" value="工作流程"/><el-option label="行业知识" value="行业知识"/><el-option label="岗位知识" value="岗位知识"/></el-select></el-form-item><el-form-item label="所属部门"><el-select v-model="editingDepartment"><el-option v-for="item in departments.slice(1)" :key="item" :label="item" :value="item"/></el-select></el-form-item><el-form-item label="类型"><el-select v-model="editingType"><el-option v-for="item in ['文档','表格','PPT','PDF','视频']" :key="item" :label="item" :value="item"/></el-select></el-form-item><el-form-item label="难度"><el-select v-model="editingDifficulty"><el-option v-for="item in ['入门','进阶','高级']" :key="item" :label="item" :value="item"/></el-select></el-form-item></div><el-form-item label="课程封面图（学员端展示，可随时更换）"><div class="upload-row"><div class="cover-preview" :class="editingCategory"><img v-if="coverUrl" :src="coverUrl" alt="封面预览" /><template v-if="!coverUrl">{{ editingCategory.slice(0, 1) }} · {{ editingCategory }}</template></div><label class="file-button">上传 / 更换封面图<input type="file" accept="image/*" @change="selectCover" /></label><span class="file-name">{{ coverFileName || '未上传时按分类颜色展示' }}</span></div></el-form-item><el-form-item label="课程内容文件"><label class="dropzone">上传文档、表格、PPT、PDF 或视频<input type="file" accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,video/*" @change="selectContent" /><small>{{ contentFileName || '点击选择文件' }}</small></label></el-form-item><el-form-item label="课程简介"><el-input v-model="editingDescription" type="textarea" :rows="3" placeholder="简要介绍课程内容..." /></el-form-item></el-form><template #footer><el-button class="cancel-button" @click="dialogVisible = false">取消</el-button><el-button type="primary" class="save-button" @click="saveCourse">保存</el-button></template></el-dialog>
+  <el-dialog v-model="dialogVisible" :title="editingCourse ? '编辑课程' : '上传课程'" width="780px" class="course-dialog"><el-form label-position="top"><div class="form-grid"><el-form-item label="课程名称"><el-input v-model="editingName" placeholder="请输入课程名称" /></el-form-item><el-form-item label="内容分类（决定封面颜色）"><el-select v-model="editingCategory"><el-option label="规章制度" value="规章制度"/><el-option label="企业文化" value="企业文化"/><el-option label="工作流程" value="工作流程"/><el-option label="行业知识" value="行业知识"/><el-option label="岗位知识" value="岗位知识"/></el-select></el-form-item><el-form-item label="所属部门"><el-select v-model="editingDepartment"><el-option v-for="item in departments.slice(1)" :key="item" :label="item" :value="item"/></el-select></el-form-item><el-form-item label="类型"><el-select v-model="editingType"><el-option v-for="item in ['文档','表格','PPT','PDF','视频']" :key="item" :label="item" :value="item"/></el-select></el-form-item><el-form-item label="难度"><el-select v-model="editingDifficulty"><el-option v-for="item in ['入门','进阶','高级']" :key="item" :label="item" :value="item"/></el-select></el-form-item></div><el-form-item label="课程封面图（学员端展示，可随时更换）"><div class="upload-row"><div class="cover-preview" :class="editingCategory"><img v-if="coverUrl" :src="coverUrl" alt="封面预览" /><template v-if="!coverUrl">{{ editingCategory.slice(0, 1) }} · {{ editingCategory }}</template></div><label class="file-button">上传 / 更换封面图<input type="file" accept="image/*" @change="selectCover" /></label><span class="file-name">{{ coverFileName || '未上传时按分类颜色展示' }}</span></div></el-form-item><el-form-item label="课程内容文件"><label class="dropzone" :class="{ uploaded: !!contentFileName }"><template v-if="!contentFileName"><div class="dz-icon">📁</div><strong class="dz-title">上传文档、表格、PPT、PDF 或视频</strong><small class="dz-hint">点击此处选择文件</small></template><template v-else><div class="dz-file"><span class="dz-file-icon">{{ fileMeta.icon }}</span><div class="dz-file-info"><strong class="dz-file-name" :title="contentFileName">{{ contentFileName }}</strong><small class="dz-file-meta">{{ fileMeta.label }} · {{ fileSizeText }}</small></div><span class="dz-file-tag">✓ 已上传</span></div><small class="dz-hint">点击此处可更换文件</small></template><input type="file" accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,video/*" @change="selectContent" /></label><div v-if="contentFileName" class="dz-remove-row"><button type="button" class="dz-remove-btn" @click="removeContent">✕ 移除文件</button></div></el-form-item><el-form-item label="课程简介"><el-input v-model="editingDescription" type="textarea" :rows="3" placeholder="简要介绍课程内容..." /></el-form-item></el-form><template #footer><el-button class="cancel-button" @click="dialogVisible = false">取消</el-button><el-button type="primary" class="save-button" @click="saveCourse">保存</el-button></template></el-dialog>
 </template>
 
 <style scoped>
@@ -130,8 +158,105 @@ function reset() { keyword.value = ''; activeDepartment.value = '全部'; conten
 .file-button { padding: 7px 13px; border: 1px solid var(--line); border-radius: 6px; color: #52677e; cursor: pointer; font-size: 12px; }
 .file-button input, .dropzone input { display: none; }
 .file-name { color: #9ca3af; font-size: 12px; }
-.dropzone { display: grid; place-items: center; gap: 5px; width: 100%; min-height: 78px; border: 2px dashed #d9e1e9; border-radius: 8px; color: var(--teal); cursor: pointer; font-size: 13px; }
-.dropzone small { color: #9ca3af; font-size: 11px; }
+.dropzone {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 78px;
+  padding: 14px 18px;
+  border: 2px dashed #d9e1e9;
+  border-radius: 8px;
+  color: var(--teal);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+.dropzone .dz-icon {
+  font-size: 28px;
+  opacity: 0.6;
+}
+.dropzone .dz-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--teal);
+}
+.dropzone .dz-hint {
+  color: #9ca3af;
+  font-size: 11px;
+}
+.dropzone.uploaded {
+  border-style: solid;
+  border-color: #2eb37e;
+  background: #f1faf5;
+}
+.dropzone .dz-file {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 4px 0;
+}
+.dropzone .dz-file-icon {
+  font-size: 34px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.dropzone .dz-file-info {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+}
+.dropzone .dz-file-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #173d6b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+.dropzone .dz-file-meta {
+  display: block;
+  margin-top: 3px;
+  color: #6b7280;
+  font-size: 11px;
+}
+.dropzone .dz-file-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: #2eb37e;
+  color: #fff;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.dropzone .dz-replace {
+  color: #9ca3af;
+  font-size: 11px;
+  margin-top: 2px;
+}
+.dz-remove-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.dz-remove-btn {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: color 0.15s ease;
+}
+.dz-remove-btn:hover {
+  color: #e24b4a;
+}
 .save-button { width: 100%; height: 46px; margin-left: 0 !important; }
 .cancel-button { display: none; }
 @media (max-width: 600px) {

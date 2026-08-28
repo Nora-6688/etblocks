@@ -3,9 +3,13 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useCourseStore, type CourseCategory } from '@/stores/course'
+import { useTodoStore } from '@/stores/todo'
+import { useBlockStore } from '@/stores/blocks'
 
 const router = useRouter()
 const store = useCourseStore()
+const todoStore = useTodoStore()
+const blockStore = useBlockStore()
 
 const categoryColors: Record<CourseCategory, string> = {
   企业文化: '#185fa5',
@@ -21,35 +25,6 @@ const keyword = ref('')
 const role = ref('全部岗位')
 const level = ref('全部层级')
 const category = ref('全部分类')
-const blocks = [
-  {
-    title: '新人业务岗 30 天培训计划',
-    role: '业务岗',
-    level: '新人期',
-    contents: ['企业文化入门', '业务流程规范', '业务流程章节测试'],
-    duration: '3 门课程 · 1 项练习',
-    description: '面向业务新人的完整入职学习包。',
-    color: '#185fa5',
-  },
-  {
-    title: '客服岗服务能力提升包',
-    role: '客服岗',
-    level: '成长期',
-    contents: ['客户服务标准', '客服操作手册', '服务标准模拟演练', '新人综合考核'],
-    duration: '2 门课程 · 2 项测练',
-    description: '覆盖服务标准与岗位实战能力。',
-    color: '#0f6e56',
-  },
-  {
-    title: '全员规章制度必修包',
-    role: '职能岗',
-    level: '新人期',
-    contents: ['规章制度精讲', '规章制度专项练习'],
-    duration: '1 门课程 · 1 项练习',
-    description: '适用于新员工的制度基础学习。',
-    color: '#534ab7',
-  },
-]
 const filteredCourses = computed(() =>
   store.courses.filter(
     (item) =>
@@ -60,7 +35,7 @@ const filteredCourses = computed(() =>
   ),
 )
 const filteredBlocks = computed(() =>
-  blocks.filter(
+  blockStore.blocks.filter(
     (item) =>
       item.title.includes(keyword.value) &&
       (role.value === '全部岗位' || item.role === role.value) &&
@@ -73,11 +48,48 @@ function reset() {
   level.value = '全部层级'
   category.value = '全部分类'
 }
-function add(title: string) {
-  ElMessage.success(`已将《${title}》加入待学内容`)
+
+/** 加入待学：课程 */
+function addCourse(courseId: string, title: string, type: string, duration: string, category: CourseCategory) {
+  const ok = todoStore.addTodo({
+    sourceType: 'course',
+    sourceId: courseId,
+    title,
+    meta: `${type} · ${duration}`,
+    type: '课程',
+    coverColor: categoryColors[category],
+  })
+  if (ok) ElMessage.success(`已将《${title}》加入待学内容`)
+  else ElMessage.warning(`《${title}》已在待学列表中`)
 }
+
+/** 加入待学：Blocks */
+function addBlock(blockId: string, title: string, duration: string, color: string) {
+  const ok = todoStore.addTodo({
+    sourceType: 'block',
+    sourceId: blockId,
+    title,
+    meta: `Blocks · ${duration}`,
+    type: 'Blocks',
+    coverColor: color,
+  })
+  if (ok) ElMessage.success(`已将《${title}》加入待学内容`)
+  else ElMessage.warning(`《${title}》已在待学列表中`)
+}
+
+/** 判断是否已加入待学：用于按钮状态 */
+function isAddedCourse(courseId: string) {
+  return todoStore.hasTodo('course', courseId)
+}
+function isAddedBlock(blockId: string) {
+  return todoStore.hasTodo('block', blockId)
+}
+
 function openCourse(id: string) {
   router.push(`/course/${id}`)
+}
+function openBlock(id: string) {
+  router.push(`/block/${id}`)
 }
 </script>
 <template>
@@ -154,7 +166,14 @@ function openCourse(id: string) {
           ><span>{{ course.type }}</span>
         </div>
         <div class="card-footer">
-          <span>查看课程详情</span><button @click.stop="add(course.name)">＋ 加入待学</button>
+          <span>查看课程详情</span
+          ><button
+            v-if="!isAddedCourse(course.id)"
+            @click.stop="addCourse(course.id, course.name, course.type, course.duration, course.category)"
+          >
+            ＋ 加入待学
+          </button>
+          <button v-else class="added" disabled>✓ 已加入待学</button>
         </div>
       </div>
     </article>
@@ -162,9 +181,9 @@ function openCourse(id: string) {
   <div v-else class="block-grid">
     <article
       v-for="block in filteredBlocks"
-      :key="block.title"
+      :key="block.id"
       class="block-card"
-      @click="add(block.title)"
+      @click="openBlock(block.id)"
     >
       <div class="block-top">
         <div class="block-mark" :style="{ background: block.color }">B</div>
@@ -182,7 +201,13 @@ function openCourse(id: string) {
       </div>
       <div class="block-footer">
         <span>{{ block.role }} · {{ block.level }} · {{ block.duration }}</span
-        ><button @click.stop="add(block.title)">＋ 加入待学</button>
+        ><button
+          v-if="!isAddedBlock(block.id)"
+          @click.stop="addBlock(block.id, block.title, block.duration, block.color)"
+        >
+          ＋ 加入待学
+        </button>
+        <button v-else class="added" disabled>✓ 已加入待学</button>
       </div>
     </article>
   </div>
@@ -367,6 +392,13 @@ function openCourse(id: string) {
   padding: 6px 9px;
   cursor: pointer;
   font-size: 10px;
+}
+.card-footer button.added,
+.block-footer button.added {
+  border-color: #c9d6df;
+  background: #f1f5f7;
+  color: #9ca3af;
+  cursor: not-allowed;
 }
 .block-card {
   padding: 20px;
