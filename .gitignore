@@ -37,3 +37,6 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Obsidian 笔记软件（功能文档在 ETblocks系统 目录，obsidian 配置别入仓）
+.obsidian/
