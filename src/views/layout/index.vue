@@ -2,10 +2,12 @@
 import { computed, ref } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useTodoStore } from '@/stores/todo'
+import { useNotificationStore } from '@/stores/notification'
 
 const route = useRoute()
 const router = useRouter()
 const todoStore = useTodoStore()
+const notificationStore = useNotificationStore()
 const user = ref(
   JSON.parse(sessionStorage.getItem('etblocks-user') ?? '{"name":"Nora","role":"学员"}'),
 )
@@ -13,7 +15,7 @@ const navGroups = [
   {
     label: '学习中心',
     items: [
-      { name: '工作台', path: '/blocks', icon: '⌂' },
+      { name: '学习看板', path: '/dashboard', icon: '⌂' },
       { name: '学习列表', path: '/learning', icon: '▦' },
       { name: '待学内容', path: '/todo', icon: '◷', badge: true },
       { name: '课后训练', path: '/training', icon: '✓' },
@@ -24,11 +26,15 @@ const navGroups = [
 const pageTitle = computed(
   () =>
     navGroups.flatMap((group) => group.items).find((item) => route.path === item.path)?.name ??
-    '工作台',
+    '学习看板',
 )
 function logout() {
   sessionStorage.removeItem('etblocks-user')
   router.push('/login')
+}
+function openNotifications() {
+  // 跳转到个人中心的消息 tab（如果还在）。学习看板主页也已经展示了消息面板，所以这里主要给顶栏小红点一个入口。
+  router.push('/profile')
 }
 </script>
 
@@ -64,7 +70,10 @@ function logout() {
       <header class="topbar">
         <div class="breadcrumb">ET blocks <span>/</span> {{ pageTitle }}</div>
         <div class="top-actions">
-          <button class="icon-button" title="通知">♧<i></i></button>
+          <button class="icon-button" title="通知" @click="openNotifications">
+            ♧<i v-if="notificationStore.unreadCount"></i>
+            <b v-if="notificationStore.unreadCount" class="bell-count">{{ notificationStore.unreadCount }}</b>
+          </button>
           <div class="profile">
             <div>
               <strong>{{ user.name }}</strong
@@ -254,6 +263,20 @@ function logout() {
   height: 5px;
   background: var(--orange);
   border-radius: 50%;
+}
+.bell-count {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  min-width: 16px;
+  padding: 1px 4px;
+  border-radius: 8px;
+  background: var(--orange);
+  color: #fff;
+  font-size: 9px;
+  line-height: 1.2;
+  text-align: center;
+  font-weight: 700;
 }
 .profile {
   gap: 10px;

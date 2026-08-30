@@ -1,27 +1,22 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { useHistoryStore } from '@/stores/history'
 import { useTodoStore } from '@/stores/todo'
 import { useBlockStore } from '@/stores/blocks'
-import { useNotificationStore } from '@/stores/notification'
 
 const router = useRouter()
 const userStore = useUserStore()
 const historyStore = useHistoryStore()
 const todoStore = useTodoStore()
 const blockStore = useBlockStore()
-const notificationStore = useNotificationStore()
 
-type TabKey = 'basic' | 'record' | 'path' | 'message'
+type TabKey = 'basic' | 'record' | 'path'
 const tab = ref<TabKey>('basic')
 
 const profile = computed(() => userStore.profile)
-const unread = computed(() => notificationStore.unreadCount)
 const stats = computed(() => historyStore.stats)
-const notices = computed(() => notificationStore.items)
 
 /** 学习路径列表：综合 blocks 数据 + todo + history 推算状态 */
 const pathRows = computed(() =>
@@ -41,13 +36,6 @@ const pathRows = computed(() =>
   }),
 )
 
-function markAllRead() {
-  notificationStore.markAllRead()
-  ElMessage.success('已全部标为已读')
-}
-function markRead(id: string) {
-  notificationStore.markRead(id)
-}
 function enterBlock(id: string) {
   router.push(`/block/${id}`)
 }
@@ -58,12 +46,8 @@ const stateMap: Record<string, string> = {
   曾经学习: '曾经学习',
   已完成: '已完成',
 }
-const kindMap: Record<string, string> = { 指派: '指派', 考试: '考试', 学习: '学习', 系统: '系统' }
 function stateLabel(s: string) {
   return stateMap[s] || s
-}
-function kindLabel(k: string) {
-  return kindMap[k] || k
 }
 </script>
 
@@ -84,9 +68,6 @@ function kindLabel(k: string) {
     <button :class="{ active: tab === 'basic' }" @click="tab = 'basic'">基础信息</button>
     <button :class="{ active: tab === 'record' }" @click="tab = 'record'">学习记录</button>
     <button :class="{ active: tab === 'path' }" @click="tab = 'path'">我的学习路径</button>
-    <button :class="{ active: tab === 'message' }" @click="tab = 'message'">
-      消息通知<span v-if="unread" class="dot">{{ unread }}</span>
-    </button>
   </div>
 
   <!-- ============ 基础信息 ============ -->
@@ -237,31 +218,6 @@ function kindLabel(k: string) {
           <button v-else-if="row.state === '已完成'" class="ghost" disabled>已学完</button>
           <button v-else class="ghost" disabled>待生成</button>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ 消息通知 ============ -->
-  <section v-else class="panel message-panel">
-    <div class="message-head">
-      <span>共 {{ notices.length }} 条，{{ unread }} 条未读</span>
-      <button class="link" @click="markAllRead">全部标为已读</button>
-    </div>
-    <div v-if="notices.length === 0" class="empty">暂无消息</div>
-    <div v-else class="message-list">
-      <div
-        v-for="item in notices"
-        :key="item.id"
-        class="message-row"
-        :class="{ unread: !item.read }"
-        @click="markRead(item.id)"
-      >
-        <div class="kind" :class="item.kind">{{ kindLabel(item.kind) }}</div>
-        <div class="body">
-          <b>{{ item.title }}</b>
-          <p>{{ item.body }}</p>
-        </div>
-        <small class="time">{{ item.time }}</small>
       </div>
     </div>
   </section>

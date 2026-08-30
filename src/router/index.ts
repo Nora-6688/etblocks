@@ -14,11 +14,11 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: () => import('@/views/layout/index.vue'),
-      redirect: '/blocks',
+      redirect: '/dashboard',
       children: [
         {
-          path: 'blocks',
-          name: 'blocks',
+          path: 'dashboard',
+          name: 'dashboard',
           component: () => import('@/views/blocks/index.vue'),
         },
         {
