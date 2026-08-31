@@ -91,8 +91,8 @@ interface ReviewQuestion {
 const reviewDialog = ref(false)
 const reviewExam = ref<{ name: string; status: string } | null>(null)
 const reviewInfo = ref({ score: 0, wrong: 0, submittedAt: '2026.08.28 10:24' })
-/** 本次阅卷里已同步到错题集的题 id，用于按钮置灰 */
-const addedIds = ref<string[]>([])
+/** 本次阅卷里已同步到错题集的映射：阅卷题目 id → 错题集条目 id（再点一次可取消） */
+const addedMap = ref<Record<string, string>>({})
 
 /** 已完成阅卷的演示题目（正式版由后端阅卷接口返回） */
 const reviewQuestions: ReviewQuestion[] = [
@@ -147,27 +147,33 @@ function openExam(exam: { name: string; status: string }) {
       wrong: reviewQuestions.filter((q) => !q.correct).length,
       submittedAt: '2026.08.28 10:24',
     }
-    addedIds.value = []
+    addedMap.value = {}
     reviewDialog.value = true
   } else {
     examDetail.value = true
   }
 }
 
-/** 一键把这道题同步到错题集 */
-function addToNotebook(q: ReviewQuestion) {
-  if (addedIds.value.includes(q.id)) return
-  notebookStore.addQuestion({
-    title: q.title,
-    type: q.type,
-    course: reviewExam.value?.name ?? '未关联课程',
-    myAnswer: q.myAnswer,
-    correctAnswer: q.correctAnswer,
-    analysis: q.analysis,
-    images: [],
-  })
-  addedIds.value.push(q.id)
-  ElMessage.success('已同步到错题集，可切到「错题本」查看')
+/** 一键把这道题加入错题集；已加入时再点一次取消 */
+function toggleNotebook(q: ReviewQuestion) {
+  const wqId = addedMap.value[q.id]
+  if (wqId) {
+    notebookStore.removeQuestion(wqId)
+    delete addedMap.value[q.id]
+    ElMessage.info('已从错题集移除')
+  } else {
+    const newId = notebookStore.addQuestion({
+      title: q.title,
+      type: q.type,
+      course: reviewExam.value?.name ?? '未关联课程',
+      myAnswer: q.myAnswer,
+      correctAnswer: q.correctAnswer,
+      analysis: q.analysis,
+      images: [],
+    })
+    addedMap.value[q.id] = newId
+    ElMessage.success('已同步到错题集')
+  }
 }
 function beginExam() {
   examDetail.value = false
@@ -257,9 +263,9 @@ function saveQuestion() {
   closeDialog()
 }
 
-/** 删除一条错题 */
-async function removeQuestion() {
-  const q = notebookStore.items.find((x) => x.id === questionDialog.value.id)
+/** 从错题集列表行内删除一条错题 */
+async function confirmRemove(id: string) {
+  const q = notebookStore.items.find((x) => x.id === id)
   if (!q) return
   try {
     await ElMessageBox.confirm(`确定从错题集删除这道题吗？删除后不可恢复。`, '删除错题', {
@@ -270,8 +276,13 @@ async function removeQuestion() {
   } catch {
     return
   }
-  notebookStore.removeQuestion(questionDialog.value.id)
-  closeDialog()
+  notebookStore.removeQuestion(id)
+  // 如果正开着这道题的详情弹窗，一并关掉
+  if (questionDialog.value.id === id) closeDialog()
+  // 如果这道题是阅卷里同步的，同步取消阅卷里的"已加入"状态
+  for (const [reviewId, wqId] of Object.entries(addedMap.value)) {
+    if (wqId === id) delete addedMap.value[reviewId]
+  }
   ElMessage.success('已从错题集删除')
 }
 
@@ -364,7 +375,7 @@ function typeClass(t: string) {
     <div class="list-head">
       <div>
         <h2>错题集</h2>
-        <span>共 {{ notebookStore.items.length }} 题 · 收藏整理做错的题，点击卡片查看与编辑</span>
+        <span>共 {{ notebookStore.items.length }} 题 · 点击题目查看与编辑，右侧可直接删除</span>
       </div>
       <el-button type="primary" @click="openCreate">＋ 新增错题</el-button>
     </div>
@@ -372,22 +383,25 @@ function typeClass(t: string) {
     <div v-if="!notebookStore.items.length" class="wq-empty">
       <p>错题集还是空的，点右上角「新增错题」收录第一题吧～</p>
     </div>
-    <div v-else class="wq-grid">
+    <div v-else class="wq-list">
       <div
         v-for="q in notebookStore.items"
         :key="q.id"
-        class="wq-card"
+        class="wq-row"
         @click="openView(q)"
       >
-        <div class="wq-top">
-          <span class="wq-type" :class="typeClass(q.type)">{{ q.type }}</span>
-          <small v-if="q.course && q.course !== '未关联课程'">{{ q.course }}</small>
+        <span class="wq-type" :class="typeClass(q.type)">{{ q.type }}</span>
+        <div class="wq-row-main">
+          <h3>{{ q.title }}</h3>
+          <small>
+            <template v-if="q.course && q.course !== '未关联课程'">{{ q.course }} · </template
+            >更新于 {{ q.updatedAt
+            }}<template v-if="q.images.length"> · 🖼 {{ q.images.length }} 张图</template>
+          </small>
         </div>
-        <h3>{{ q.title }}</h3>
-        <div class="wq-foot">
-          <small>更新于 {{ q.updatedAt }}</small>
-          <span v-if="q.images.length" class="wq-img-count">🖼 {{ q.images.length }} 张图</span>
-        </div>
+        <button class="wq-del" title="从错题集删除" @click.stop="confirmRemove(q.id)">
+          删除
+        </button>
       </div>
     </div>
   </section>
@@ -486,7 +500,6 @@ function typeClass(t: string) {
 
     <template #footer>
       <template v-if="questionDialog.mode === 'view'">
-        <el-button type="danger" plain @click="removeQuestion">删除</el-button>
         <el-button @click="closeDialog">关闭</el-button>
         <el-button type="primary" @click="startEdit">✎ 编辑</el-button>
       </template>
@@ -548,17 +561,7 @@ function typeClass(t: string) {
         class="review-item"
         :class="{ wrong: !q.correct }"
       >
-        <!-- 左侧：一键加入错题集 -->
-        <button
-          class="add-wq"
-          :class="{ added: addedIds.includes(q.id) }"
-          :disabled="addedIds.includes(q.id)"
-          @click="addToNotebook(q)"
-        >
-          <template v-if="addedIds.includes(q.id)">✓<br />已加入</template>
-          <template v-else>＋<br />错题本</template>
-        </button>
-        <!-- 右侧：题目内容 -->
+        <!-- 左侧：题目内容 -->
         <div class="review-body">
           <div class="review-head">
             <span class="wq-type" :class="typeClass(q.type)">{{ q.type }}</span>
@@ -566,6 +569,14 @@ function typeClass(t: string) {
             <span class="review-state" :class="q.correct ? 'right' : 'wrong'">
               {{ q.correct ? '✓ 答对' : '✕ 答错' }}
             </span>
+            <!-- 右侧：一键加入/取消错题集 -->
+            <button
+              class="add-wq"
+              :class="{ added: !!addedMap[q.id] }"
+              @click="toggleNotebook(q)"
+            >
+              {{ addedMap[q.id] ? '✓ 已加入错题' : '＋ 错题本' }}
+            </button>
           </div>
           <h4>{{ q.title }}</h4>
           <div class="review-answers">
@@ -730,46 +741,58 @@ function typeClass(t: string) {
   color: var(--muted);
   font-size: 12px;
 }
-.wq-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
-  padding: 16px 20px 20px;
-}
-.wq-card {
+.wq-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 16px;
+  gap: 10px;
+  padding: 16px 20px 20px;
+}
+.wq-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+  transition: box-shadow 0.15s, border-color 0.15s;
 }
-.wq-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 22px rgba(31, 67, 115, 0.1);
+.wq-row:hover {
+  box-shadow: 0 6px 18px rgba(31, 67, 115, 0.08);
   border-color: #b8cfe7;
 }
-.wq-top,
-.wq-foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.wq-row-main {
+  flex: 1;
+  min-width: 0;
 }
-.wq-top small,
-.wq-foot small,
-.wq-img-count {
-  color: var(--muted);
-  font-size: 10px;
-}
-.wq-card h3 {
+.wq-row-main h3 {
   font-size: 13px;
   line-height: 1.5;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+.wq-row-main small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 4px;
+}
+.wq-del {
+  flex: none;
+  padding: 5px 12px;
+  border: 1px solid #f0c9b8;
+  border-radius: 6px;
+  background: #fff5f0;
+  color: #c2410c;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.wq-del:hover {
+  background: #fde8dc;
+  border-color: #e0a488;
 }
 .wq-type {
   padding: 2px 7px;
@@ -991,27 +1014,25 @@ function typeClass(t: string) {
   background: #fffaf5;
 }
 .add-wq {
-  width: 64px;
+  margin-left: auto;
   flex: none;
-  padding: 8px 0;
+  padding: 4px 12px;
   border: 1px solid #b8cfe7;
-  border-radius: 6px;
+  border-radius: 999px;
   background: var(--mint);
   color: var(--teal);
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.6;
   cursor: pointer;
   transition: all 0.15s;
 }
-.add-wq:hover:not(:disabled) {
+.add-wq:hover:not(.added) {
   border-color: var(--teal);
 }
-.add-wq.added,
-.add-wq:disabled {
+.add-wq.added {
   border-color: var(--teal);
   background: var(--teal);
   color: #fff;
-  cursor: default;
 }
 .review-body {
   flex: 1;
@@ -1027,7 +1048,6 @@ function typeClass(t: string) {
   font-size: 10px;
 }
 .review-state {
-  margin-left: auto;
   font-size: 11px;
   font-weight: 700;
 }
