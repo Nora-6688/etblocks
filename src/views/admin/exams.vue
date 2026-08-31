@@ -19,6 +19,17 @@ type Question = {
   tags: string
 }
 type Bank = { id: number; name: string; count: number; creator: string; questions: Question[] }
+/** 推送目标：一名学员的送达状态 */
+type PushTarget = { name: string; department: string; status: '成功' | '失败'; reason?: string }
+/** 一次推送批次：时间、方式、名单 */
+type PushRecord = {
+  id: number
+  mode: '组织架构' | '指定学员'
+  target: string
+  deadline: string
+  pushedAt: string
+  targets: PushTarget[]
+}
 type Paper = {
   id: number
   name: string
@@ -28,6 +39,7 @@ type Paper = {
   duration: number
   status: string
   questions: { question: Question; score: number }[]
+  pushRecords: PushRecord[]
 }
 
 const tab = ref<Tab>('题库')
@@ -126,14 +138,28 @@ const banks = ref<Bank[]>([
   { id: 5, name: '规章制度题库', count: 10, creator: 'Nora', questions: [] },
 ])
 const papers = ref<Paper[]>([
+  { id: 4, name: '测试-企业文化', audience: '全司通用', count: 0, pass: 60, duration: 30, status: '草稿', questions: [], pushRecords: [] },
   { id: 1, name: '新人入职综合考核', audience: '全司通用', count: 50, pass: 60, duration: 60, status: '已发布', questions: [
     { question: { ...emptyQuestion(), title: '公司核心价值观包括以下哪些？', type: '多选题', difficulty: '入门', course: '企业文化入门' }, score: 10 },
     { question: { ...emptyQuestion(), title: '超过10万的合同需要谁审批？', type: '单选题', difficulty: '进阶', course: '业务流程规范' }, score: 10 },
+  ], pushRecords: [
+    {
+      id: 101,
+      mode: '组织架构',
+      target: '客服部',
+      deadline: '2026.09.15',
+      pushedAt: '2026.08.20 14:32',
+      targets: [
+        { name: 'Farry', department: '客服部', status: '成功' },
+        { name: 'Lily', department: '客服部', status: '成功' },
+        { name: 'Bling', department: '中后台', status: '失败', reason: '企微通知未送达（账号停用）' },
+      ],
+    },
   ] },
   { id: 2, name: '业务知识季度考核', audience: '业务岗', count: 30, pass: 60, duration: 40, status: '已发布', questions: [
     { question: { ...emptyQuestion(), title: '业务审批流程中，超过 10 万的合同需要谁审批？', type: '单选题', difficulty: '进阶', course: '业务流程规范' }, score: 15 },
-  ] },
-  { id: 3, name: '规章制度专项测试', audience: '全司通用', count: 20, pass: 70, duration: 30, status: '草稿', questions: [] },
+  ], pushRecords: [] },
+  { id: 3, name: '规章制度专项测试', audience: '全司通用', count: 20, pass: 70, duration: 30, status: '草稿', questions: [], pushRecords: [] },
 ])
 const pendingPapers = ref([
   { name: '业务知识季度考核', learner: 'Tommy', submitted: '2026.08.26', subjective: 2 },
@@ -288,7 +314,7 @@ function removeQuestion(question: Question) {
 function createPaper() { paperEditorVisible.value = true }
 function savePaper() {
   if (!newPaperName.value.trim()) { ElMessage.warning('请输入试卷名称'); return }
-  papers.value.unshift({ id: Date.now(), name: newPaperName.value, audience: newPaperAudience.value, count: 0, pass: newPaperPass.value, duration: newPaperDuration.value, status: '草稿', questions: [] })
+  papers.value.unshift({ id: Date.now(), name: newPaperName.value, audience: newPaperAudience.value, count: 0, pass: newPaperPass.value, duration: newPaperDuration.value, status: '草稿', questions: [], pushRecords: [] })
   newPaperName.value = ''
   paperEditorVisible.value = false
   ElMessage.success('试卷已创建')
@@ -304,6 +330,7 @@ function copyPaper(paper: Paper) {
     duration: paper.duration,
     status: '草稿',
     questions: paper.questions.map((item) => ({ question: item.question, score: item.score })),
+    pushRecords: [],
   }
   papers.value.push(copy)
   ElMessage.success('试卷已复制')
@@ -312,6 +339,97 @@ async function removePaper(paper: Paper) {
   await ElMessageBox.confirm(`确定删除《${paper.name}》吗？`, '删除试卷', { type: 'warning' })
   papers.value = papers.value.filter((item) => item !== paper)
   ElMessage.success('试卷已删除')
+}
+
+/* ---------- 推送学员（逻辑同 Blocks 推送） ---------- */
+const learners = [
+  { name: 'Tommy', department: '业务部' }, { name: 'Selina', department: '业务部' },
+  { name: 'Farry', department: '客服部' }, { name: 'Lily', department: '客服部' },
+  { name: 'Solar', department: '商务部' }, { name: 'Vikki', department: '产品部' },
+  { name: 'Bling', department: '中后台' },
+]
+const pushVisible = ref(false)
+const pushingPaper = ref<Paper | null>(null)
+const pushMode = ref<'组织架构' | '指定学员'>('组织架构')
+const pushDepartment = ref('业务部')
+const pushKeyword = ref('')
+const pushSelected = ref<string[]>([])
+const pushDeadline = ref('')
+
+const pushDeptLearners = computed(() =>
+  pushDepartment.value === '全司不限' ? learners : learners.filter((l) => l.department === pushDepartment.value),
+)
+const pushSearched = computed(() =>
+  learners.filter(
+    (l) =>
+      l.name.toLowerCase().includes(pushKeyword.value.trim().toLowerCase()) ||
+      l.department.includes(pushKeyword.value.trim()),
+  ),
+)
+
+function openPush(paper: Paper) {
+  pushingPaper.value = paper
+  pushMode.value = '组织架构'
+  pushDepartment.value = '业务部'
+  pushKeyword.value = ''
+  pushSelected.value = []
+  pushDeadline.value = ''
+  pushVisible.value = true
+}
+function togglePushAll(checked: boolean) {
+  const names = pushDeptLearners.value.map((l) => l.name)
+  pushSelected.value = checked
+    ? [...new Set([...pushSelected.value, ...names])]
+    : pushSelected.value.filter((n) => !names.includes(n))
+}
+function addPushLearner(name: string) {
+  if (!pushSelected.value.includes(name)) pushSelected.value.push(name)
+}
+function removePushLearner(name: string) {
+  pushSelected.value = pushSelected.value.filter((n) => n !== name)
+}
+function formatNow() {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+function confirmPushPaper() {
+  const paper = pushingPaper.value
+  if (!paper) return
+  if (!pushSelected.value.length) { ElMessage.warning('请至少添加一位推送对象'); return }
+  if (!pushDeadline.value) { ElMessage.warning('请选择考试截止时间'); return }
+  const dl = typeof pushDeadline.value === 'string'
+    ? pushDeadline.value
+    : new Date(pushDeadline.value).toISOString().slice(0, 10).replace(/-/g, '.')
+  const targets: PushTarget[] = pushSelected.value.map((name) => {
+    const l = learners.find((x) => x.name === name)
+    // 演示：Bling 账号停用，企微通知送达失败
+    if (name === 'Bling') return { name, department: l?.department ?? '-', status: '失败' as const, reason: '企微通知未送达（账号停用）' }
+    return { name, department: l?.department ?? '-', status: '成功' as const }
+  })
+  paper.pushRecords.unshift({
+    id: Date.now(),
+    mode: pushMode.value,
+    target: pushMode.value === '组织架构' ? pushDepartment.value : `指定 ${targets.length} 人`,
+    deadline: dl,
+    pushedAt: formatNow(),
+    targets,
+  })
+  const ok = targets.filter((t) => t.status === '成功').length
+  pushVisible.value = false
+  ElMessage.success(`已完成推送：成功 ${ok} 人、失败 ${targets.length - ok} 人，可在「推送记录」查看名单`)
+}
+
+/* ---------- 推送记录查看 ---------- */
+const pushLogVisible = ref(false)
+const pushLogPaper = ref<Paper | null>(null)
+function openPushLog(paper: Paper) {
+  pushLogPaper.value = paper
+  pushLogVisible.value = true
+}
+function recordSummary(rec: PushRecord) {
+  const ok = rec.targets.filter((t) => t.status === '成功').length
+  return { ok, fail: rec.targets.length - ok }
 }
 
 /* ---------- 自动批改 & 分享 ---------- */
@@ -409,7 +527,7 @@ function copyShareLink() {
           <td>{{ paper.pass }} 分</td>
           <td>{{ paper.duration }} 分钟</td>
           <td><span class="status" :class="paper.status === '已发布' ? 'published' : ''">{{ paper.status }}</span></td>
-          <td><button class="table-action" @click="selectPaper(paper)">编辑</button><button class="table-action" @click="copyPaper(paper)">复制</button><button v-if="paper.status === '草稿'" class="table-action" @click="publishPaper(paper)">发布</button><button class="table-action danger" @click="removePaper(paper)">删除</button></td>
+          <td><button class="table-action" @click="selectPaper(paper)">编辑</button><button class="table-action" @click="copyPaper(paper)">复制</button><button v-if="paper.status === '草稿'" class="table-action" @click="publishPaper(paper)">发布</button><button v-if="paper.status === '已发布'" class="table-action push" @click="openPush(paper)">推送学员</button><button v-if="paper.status === '已发布' && paper.pushRecords.length" class="table-action" @click="openPushLog(paper)">推送记录<b class="rec-badge">{{ paper.pushRecords.length }}</b></button><button class="table-action danger" @click="removePaper(paper)">删除</button></td>
         </tr>
       </tbody></table></div>
     </section>
@@ -624,6 +742,95 @@ function copyShareLink() {
     <template #footer><el-button @click="markDetailVisible = false">关闭</el-button></template>
   </el-dialog>
 
+  <!-- ============ 推送学员（逻辑同 Blocks 推送） ============ -->
+  <el-dialog v-model="pushVisible" :title="`推送试卷 - ${pushingPaper?.name ?? ''}`" width="580px" class="push-dialog">
+    <el-form label-position="top">
+      <el-form-item label="添加方式">
+        <div class="recipient-tabs">
+          <button type="button" :class="{ active: pushMode === '组织架构' }" @click="pushMode = '组织架构'">从部门架构添加</button>
+          <button type="button" :class="{ active: pushMode === '指定学员' }" @click="pushMode = '指定学员'">指定学员</button>
+        </div>
+      </el-form-item>
+      <template v-if="pushMode === '组织架构'">
+        <el-form-item label="推送部门">
+          <el-select v-model="pushDepartment" style="width: 100%">
+            <el-option v-for="d in ['业务部','客服部','商务部','产品部','中后台','全司不限']" :key="d" :label="d" :value="d" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="推送对象">
+          <div class="learner-picker">
+            <el-checkbox :model-value="pushDeptLearners.every((l) => pushSelected.includes(l.name))" @change="togglePushAll">全选{{ pushDepartment }}</el-checkbox>
+            <div class="learner-options">
+              <button v-for="l in pushDeptLearners" :key="l.name" type="button" class="learner-option" :class="{ added: pushSelected.includes(l.name) }" @click="addPushLearner(l.name)">
+                <span>{{ l.name }}<small>{{ l.department }}</small></span>
+                <b>{{ pushSelected.includes(l.name) ? '已添加' : '+' }}</b>
+              </button>
+            </div>
+          </div>
+        </el-form-item>
+      </template>
+      <template v-else>
+        <el-form-item label="搜索系统内学员">
+          <el-input v-model="pushKeyword" placeholder="输入姓名或部门搜索" clearable />
+        </el-form-item>
+        <div class="search-results">
+          <button v-for="l in pushSearched" :key="l.name" type="button" class="learner-option" :class="{ added: pushSelected.includes(l.name) }" @click="addPushLearner(l.name)">
+            <span>{{ l.name }}<small>{{ l.department }}</small></span>
+            <b>{{ pushSelected.includes(l.name) ? '已添加' : '+' }}</b>
+          </button>
+        </div>
+      </template>
+      <el-form-item label="已选推送对象">
+        <div class="selected-recipients">
+          <span v-if="!pushSelected.length" class="placeholder">尚未选择推送对象</span>
+          <span v-for="name in pushSelected" :key="name" class="recipient-chip">{{ name }}<button type="button" @click="removePushLearner(name)">×</button></span>
+        </div>
+      </el-form-item>
+      <el-form-item label="考试截止时间">
+        <el-date-picker v-model="pushDeadline" type="date" placeholder="选择截止日期" style="width: 100%" />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="pushVisible = false">取消</el-button>
+      <el-button type="primary" @click="confirmPushPaper">确认推送</el-button>
+    </template>
+  </el-dialog>
+
+  <!-- ============ 推送记录 ============ -->
+  <el-dialog v-model="pushLogVisible" :title="`推送记录 - ${pushLogPaper?.name ?? ''}`" width="640px">
+    <template v-if="pushLogPaper">
+      <div v-if="!pushLogPaper.pushRecords.length" class="empty">该试卷还没有推送记录</div>
+      <div v-for="rec in pushLogPaper.pushRecords" :key="rec.id" class="push-record">
+        <div class="record-head">
+          <span class="record-time">{{ rec.pushedAt }}</span>
+          <span class="record-mode">{{ rec.mode }} · {{ rec.target }}</span>
+          <span class="record-deadline">截止 {{ rec.deadline }}</span>
+          <span class="record-count">
+            <b class="ok">成功 {{ recordSummary(rec).ok }}</b>
+            <b v-if="recordSummary(rec).fail" class="fail">失败 {{ recordSummary(rec).fail }}</b>
+          </span>
+        </div>
+        <div class="record-table">
+          <table>
+            <thead><tr><th>姓名</th><th>部门</th><th>推送状态</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr v-for="t in rec.targets" :key="t.name">
+                <td>{{ t.name }}</td>
+                <td>{{ t.department }}</td>
+                <td><span class="push-status" :class="t.status === '成功' ? 'ok' : 'fail'">{{ t.status }}</span></td>
+                <td class="reason">{{ t.reason || '已送达企业微信，等待学员完成' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </template>
+    <template #footer>
+      <el-button @click="pushLogVisible = false">关闭</el-button>
+      <el-button type="primary" @click="pushLogVisible = false; openPush(pushLogPaper!)">再次推送</el-button>
+    </template>
+  </el-dialog>
+
   <el-dialog v-model="shareVisible" title="分享成绩" width="500px">
     <template v-if="sharePaper">
       <div class="share-info">
@@ -755,4 +962,39 @@ tr:last-child td{border-bottom:0}
 .channel-btn{padding:8px 16px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--teal);cursor:pointer;font-size:12px}
 .channel-btn:hover{border-color:var(--teal);background:var(--mint)}
 .share-tip{color:var(--muted);font-size:11px;margin-top:8px}
+/* ---------- 推送学员弹窗（同 Blocks 推送交互） ---------- */
+.recipient-tabs{display:flex;width:100%;border-bottom:1px solid var(--line)}
+.recipient-tabs button{padding:9px 15px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);cursor:pointer;font-size:12px}
+.recipient-tabs button.active{border-bottom-color:var(--teal);color:var(--teal);font-weight:600}
+.learner-picker{display:grid;gap:9px;padding:10px 12px;border:1px solid var(--line);background:#fafcfe}
+.learner-options,.search-results{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:10px}
+.learner-option{display:flex;align-items:center;justify-content:space-between;min-height:43px;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:#233e61;text-align:left;cursor:pointer;font-size:12px}
+.learner-option:hover{border-color:var(--teal)}
+.learner-option.added{border-color:#b8d7f1;background:var(--mint);color:var(--teal)}
+.learner-option span{display:grid;gap:1px}
+.learner-option small{color:var(--muted);font-size:10px}
+.learner-option b{display:grid;place-items:center;min-width:20px;height:20px;border-radius:50%;background:var(--mint);color:var(--teal);font-size:15px}
+.learner-option.added b{width:auto;border-radius:0;background:transparent;font-size:10px;font-weight:500}
+.search-results{max-height:160px;overflow:auto;margin:-7px 0 17px;padding:8px;border:1px solid var(--line);background:#fafcfe}
+.selected-recipients{display:flex;min-height:42px;align-items:center;flex-wrap:wrap;gap:7px;padding:8px;border:1px solid var(--line);background:#fafcfe}
+.selected-recipients .placeholder{color:#9ca3af;font-size:12px}
+.recipient-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:4px;background:var(--mint);color:var(--teal);font-size:11px}
+.recipient-chip button{border:0;background:transparent;color:var(--teal);cursor:pointer;font-size:14px;line-height:1}
+/* 推送按钮高亮 */
+.table-action.push{border-color:#b8d7f1;background:var(--mint);color:var(--teal);font-weight:600}
+.rec-badge{display:inline-grid;place-items:center;min-width:14px;height:14px;margin-left:3px;border-radius:7px;background:var(--teal);color:#fff;font-size:9px;font-weight:600}
+/* ---------- 推送记录弹窗 ---------- */
+.push-record{margin-bottom:14px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.record-head{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;padding:11px 14px;background:#fafbfc;border-bottom:1px solid var(--line);font-size:12px}
+.record-time{color:#233e61;font-weight:600}
+.record-mode{color:var(--muted)}
+.record-deadline{color:var(--muted)}
+.record-count{margin-left:auto;display:flex;gap:10px}
+.record-count .ok{color:#0f6e56;font-weight:600}
+.record-count .fail{color:#a32d2d;font-weight:600}
+.record-table table{min-width:0}
+.push-status{display:inline-block;padding:2px 8px;border-radius:9px;font-size:10px}
+.push-status.ok{background:#e1f5ee;color:#0f6e56}
+.push-status.fail{background:#fdecec;color:#a32d2d}
+.reason{color:var(--muted)}
 </style>
