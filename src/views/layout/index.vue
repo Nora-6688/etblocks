@@ -43,11 +43,7 @@ function openNotifications() {
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-mark">ET</span
-        ><span class="brand-copy">ET Blocks<small>TRAINING OS</small></span>
-      </div>
-      <div class="workspace-switch">
-        <span class="workspace-dot"></span><span>Ford · 培训中心</span
-        ><span class="chevron">⌄</span>
+        ><span class="brand-copy">ET Blocks<small>LEARNING PLATFORM</small></span>
       </div>
       <nav class="nav">
         <div v-for="group in navGroups" :key="group.label" class="nav-group">
@@ -138,27 +134,8 @@ function openNotifications() {
   letter-spacing: 2px;
   font-weight: 500;
 }
-.workspace-switch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid #315a7c;
-  padding: 11px 12px;
-  font-size: 12px;
-  color: #e2edf8;
-}
-.workspace-dot {
-  width: 7px;
-  height: 7px;
-  background: #79b6e5;
-  border-radius: 50%;
-}
-.chevron {
-  margin-left: auto;
-  color: #7d9ab9;
-}
 .nav {
-  margin-top: 31px;
+  margin-top: 18px;
 }
 .nav-group + .nav-group {
   margin-top: 27px;
@@ -332,17 +309,9 @@ function openNotifications() {
     padding: 0 7px 30px;
   }
   .brand-copy,
-  .workspace-switch span:not(.workspace-dot),
   .nav-text,
   .nav-label,
   .sidebar-foot .nav-text {
-    display: none;
-  }
-  .workspace-switch {
-    justify-content: center;
-    padding: 12px 0;
-  }
-  .chevron {
     display: none;
   }
   .nav-item {
