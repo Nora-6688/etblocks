@@ -145,11 +145,10 @@ function markAllRead() {
   notificationStore.markAllRead()
   ElMessage.success('已全部标为已读')
 }
-function openNotice(id: string) {
-  notificationStore.markRead(id)
-}
-function noticeTo() {
-  router.push('/profile')
+/** 点击消息 = 标已读 + 跳到这条消息的来源页（课程 / Blocks / 待学 / 阅卷结果） */
+function openNotice(item: { id: string; link?: string }) {
+  notificationStore.markRead(item.id)
+  if (item.link) router.push(item.link)
 }
 </script>
 
@@ -346,11 +345,10 @@ function noticeTo() {
           <div>
             <p class="eyebrow">MESSAGES</p>
             <h2>消息通知</h2>
-            <p class="sub">{{ unread ? `你还有 ${unread} 条未读` : '已全部读完' }}</p>
+            <p class="sub">{{ unread ? `${unread} 条未读 · ` : '' }}点击消息可跳到来源</p>
           </div>
           <div class="notice-actions">
             <button class="mark-all" @click="markAllRead">全部已读</button>
-            <button class="more" @click="noticeTo">个人中心 →</button>
           </div>
         </div>
         <div class="notice-list">
@@ -359,7 +357,7 @@ function noticeTo() {
             :key="n.id"
             class="notice-item"
             :class="{ unread: !n.read }"
-            @click="openNotice(n.id)"
+            @click="openNotice(n)"
           >
             <span class="kind-tag" :class="noticeKindClass(n.kind)">{{ n.kind }}</span>
             <div class="notice-body">
@@ -367,6 +365,7 @@ function noticeTo() {
               <p>{{ n.body }}</p>
               <small>{{ timeAgoLabel(n.time) }}</small>
             </div>
+            <span v-if="n.link" class="go-source">查看 →</span>
             <span v-if="!n.read" class="dot"></span>
           </div>
         </div>
@@ -721,18 +720,23 @@ function noticeTo() {
   display: flex;
   gap: 8px;
 }
-.mark-all,
-.more {
+.mark-all {
   border: 0;
   background: transparent;
   cursor: pointer;
   font-size: 11px;
-}
-.mark-all {
   color: var(--teal);
 }
-.more {
-  color: var(--muted);
+.go-source {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--teal);
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.notice-item:hover .go-source {
+  opacity: 1;
 }
 .notice-item {
   display: flex;

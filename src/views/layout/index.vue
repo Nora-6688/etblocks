@@ -33,8 +33,8 @@ function logout() {
   router.push('/login')
 }
 function openNotifications() {
-  // 跳转到个人中心的消息 tab（如果还在）。学习看板主页也已经展示了消息面板，所以这里主要给顶栏小红点一个入口。
-  router.push('/profile')
+  // 消息通知主入口在学习看板右下方的消息面板
+  router.push('/dashboard')
 }
 </script>
 
@@ -43,7 +43,7 @@ function openNotifications() {
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-mark">ET</span
-        ><span class="brand-copy">ET blocks<small>TRAINING OS</small></span>
+        ><span class="brand-copy">ET Blocks<small>TRAINING OS</small></span>
       </div>
       <div class="workspace-switch">
         <span class="workspace-dot"></span><span>Ford · 培训中心</span
@@ -68,7 +68,7 @@ function openNotifications() {
     </aside>
     <main class="main-panel">
       <header class="topbar">
-        <div class="breadcrumb">ET blocks <span>/</span> {{ pageTitle }}</div>
+        <div class="breadcrumb">ET Blocks <span>/</span> {{ pageTitle }}</div>
         <div class="top-actions">
           <button class="icon-button" title="通知" @click="openNotifications">
             ♧<i v-if="notificationStore.unreadCount"></i>

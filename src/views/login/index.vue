@@ -32,7 +32,7 @@ function submitChangePassword() {
 <template>
   <main class="login-page">
     <section class="login-card">
-      <div class="login-logo"><span>ET</span><strong>ET blocks</strong></div>
+      <div class="login-logo"><span>ET</span><strong>ET Blocks</strong></div>
       <p class="slogan">企业培训学习平台 · 让成长有迹可循</p>
       <el-button class="wecom-button" @click="login"
         ><span class="wecom-icon">●</span> 企业微信一键登录</el-button

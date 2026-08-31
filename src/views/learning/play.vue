@@ -150,7 +150,8 @@ function finishLearning() {
       notificationStore.push({
         kind: '学习',
         title: `已学完《${course.value!.name}》`,
-        body: '可在「个人中心 - 学习记录」查看历史。',
+        body: '已归档到学习记录，点击本条消息可回到课程页。',
+        link: `/course/${route.params.id}`,
       })
       ElMessage.success('学习完成，已从待学列表移除')
       router.push({ path: `/course/${route.params.id}`, query: route.query })

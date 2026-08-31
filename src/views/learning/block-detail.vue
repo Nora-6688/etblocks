@@ -76,7 +76,8 @@ function finishBlock() {
       notificationStore.push({
         kind: '学习',
         title: `已完成 Blocks《${block.value!.title}》`,
-        body: '已在「个人中心 - 我的学习路径」标记为已完成。',
+        body: '学习路径已标记为已完成，点击本条消息可回到该 Blocks。',
+        link: `/block/${block.value!.id}`,
       })
       ElMessage.success('Blocks 学习完成，已从待学列表移除')
       router.push('/todo')
