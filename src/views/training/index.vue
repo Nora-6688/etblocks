@@ -223,10 +223,8 @@ function openView(q: WrongQuestion) {
   form.value = JSON.parse(JSON.stringify(q)) // 拷贝，避免没保存就污染列表
   questionDialog.value = { visible: true, mode: 'view', id: q.id }
 }
-/** 查看态 → 编辑态（可从列表按钮直接进入编辑） */
-function startEdit(q?: WrongQuestion) {
-  if (q) form.value = JSON.parse(JSON.stringify(q))
-  questionDialog.value.id = q?.id ?? questionDialog.value.id
+/** 查看态 → 编辑态 */
+function startEdit() {
   questionDialog.value.mode = 'edit'
 }
 function closeDialog() {
@@ -407,7 +405,6 @@ function typeShortLabel(t: string) {
           }}<template v-if="q.images.length"> · 🖼 {{ q.images.length }} 张图</template>
         </small>
       </div>
-      <button @click.stop="startEdit(q)">编辑 →</button>
       <button class="danger" @click.stop="confirmRemove(q.id)">删除</button>
     </div>
   </section>
