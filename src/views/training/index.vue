@@ -76,9 +76,98 @@ function submitAnswer() {
   submitted.value = true
   ElMessage.success('练习已完成，参考答案已展示')
 }
+/* ==================== 阅卷结果查看 ==================== */
+interface ReviewQuestion {
+  id: string
+  no: number
+  type: WrongQuestionType
+  title: string
+  myAnswer: string
+  correctAnswer: string
+  analysis: string
+  correct: boolean
+}
+
+const reviewDialog = ref(false)
+const reviewExam = ref<{ name: string; status: string } | null>(null)
+const reviewInfo = ref({ score: 0, wrong: 0, submittedAt: '2026.08.28 10:24' })
+/** 本次阅卷里已同步到错题集的题 id，用于按钮置灰 */
+const addedIds = ref<string[]>([])
+
+/** 已完成阅卷的演示题目（正式版由后端阅卷接口返回） */
+const reviewQuestions: ReviewQuestion[] = [
+  {
+    id: 'rq1',
+    no: 1,
+    type: '单选题',
+    title: '客户提出投诉时，第一步应该做什么？',
+    myAnswer: 'B. 先解释公司政策',
+    correctAnswer: 'A. 先安抚情绪、倾听并记录诉求',
+    analysis: '服务标准要求"先处理心情，再处理事情"，第一步永远是安抚与倾听，直接解释政策容易激化情绪。',
+    correct: false,
+  },
+  {
+    id: 'rq2',
+    no: 2,
+    type: '判断题',
+    title: '所有客户投诉都必须在 24 小时内完成首次响应。',
+    myAnswer: '正确',
+    correctAnswer: '正确',
+    analysis: '按现行服务标准，投诉首次响应时限统一为 24 小时。',
+    correct: true,
+  },
+  {
+    id: 'rq3',
+    no: 3,
+    type: '多选题',
+    title: '以下哪些属于客户服务禁语？',
+    myAnswer: 'A、C',
+    correctAnswer: 'A、B、C',
+    analysis: 'B 项"你去问别的部门"同样属于推诿类禁语，多选题漏选不得分。',
+    correct: false,
+  },
+  {
+    id: 'rq4',
+    no: 4,
+    type: '简答题',
+    title: '简述 VIP 客户服务升级的处理流程。',
+    myAnswer: '受理后按等级转交主管处理，处理完反馈客户。',
+    correctAnswer: '受理 → 分级 → 升级处理 → 结果反馈 → 回访确认',
+    analysis: '整体思路对，但漏了最后的"回访确认"闭环环节，阅卷扣 2 分。',
+    correct: true,
+  },
+]
+
 function openExam(exam: { name: string; status: string }) {
-  if (exam.status.includes('已完成')) ElMessage.info('阅卷结果：92 分')
-  else examDetail.value = true
+  if (exam.status.includes('已完成')) {
+    // 已完成阅卷：打开阅卷结果查看
+    reviewExam.value = exam
+    reviewInfo.value = {
+      score: Number(exam.status.match(/(\d+)\s*分/)?.[1] ?? 0),
+      wrong: reviewQuestions.filter((q) => !q.correct).length,
+      submittedAt: '2026.08.28 10:24',
+    }
+    addedIds.value = []
+    reviewDialog.value = true
+  } else {
+    examDetail.value = true
+  }
+}
+
+/** 一键把这道题同步到错题集 */
+function addToNotebook(q: ReviewQuestion) {
+  if (addedIds.value.includes(q.id)) return
+  notebookStore.addQuestion({
+    title: q.title,
+    type: q.type,
+    course: reviewExam.value?.name ?? '未关联课程',
+    myAnswer: q.myAnswer,
+    correctAnswer: q.correctAnswer,
+    analysis: q.analysis,
+    images: [],
+  })
+  addedIds.value.push(q.id)
+  ElMessage.success('已同步到错题集，可切到「错题本」查看')
 }
 function beginExam() {
   examDetail.value = false
@@ -292,7 +381,7 @@ function typeClass(t: string) {
       >
         <div class="wq-top">
           <span class="wq-type" :class="typeClass(q.type)">{{ q.type }}</span>
-          <small>{{ q.course }}</small>
+          <small v-if="q.course && q.course !== '未关联课程'">{{ q.course }}</small>
         </div>
         <h3>{{ q.title }}</h3>
         <div class="wq-foot">
@@ -319,7 +408,9 @@ function typeClass(t: string) {
     <div v-if="questionDialog.mode === 'view'" class="wq-detail">
       <div class="wq-meta">
         <span class="wq-type" :class="typeClass(form.type)">{{ form.type }}</span>
-        <small>关联课程：{{ form.course }}</small>
+        <small v-if="form.course && form.course !== '未关联课程'"
+          >关联课程：{{ form.course }}</small
+        >
       </div>
       <h3 class="wq-title">{{ form.title }}</h3>
       <div class="wq-field">
@@ -355,18 +446,12 @@ function typeClass(t: string) {
           placeholder="例如：业务审批流程中，超过 10 万的合同需要谁审批？"
         />
       </label>
-      <div class="wq-cols">
-        <label class="wq-row">
-          <span>题型</span>
-          <el-select v-model="form.type" style="width: 100%">
-            <el-option v-for="t in questionTypeOptions" :key="t" :label="t" :value="t" />
-          </el-select>
-        </label>
-        <label class="wq-row">
-          <span>关联课程</span>
-          <el-input v-model="form.course" placeholder="例如：业务流程规范" />
-        </label>
-      </div>
+      <label class="wq-row">
+        <span>题型</span>
+        <el-select v-model="form.type" style="width: 100%">
+          <el-option v-for="t in questionTypeOptions" :key="t" :label="t" :value="t" />
+        </el-select>
+      </label>
       <div class="wq-cols">
         <label class="wq-row">
           <span>我的答案</span>
@@ -439,6 +524,71 @@ function typeClass(t: string) {
       ><el-button type="primary" @click="beginExam">开始考试</el-button></template
     ></el-dialog
   >
+
+  <!-- ============ 阅卷结果查看 ============ -->
+  <el-dialog
+    v-model="reviewDialog"
+    :title="`${reviewExam?.name ?? ''} · 阅卷结果`"
+    width="720px"
+  >
+    <div class="review-summary">
+      <div class="review-score">
+        <b>{{ reviewInfo.score }}</b>
+        <span>分数</span>
+      </div>
+      <div class="review-meta">
+        共 {{ reviewQuestions.length }} 题（演示节选） · 答错 {{ reviewInfo.wrong }} 题<br />
+        提交时间 {{ reviewInfo.submittedAt }} · 已完成阅卷
+      </div>
+    </div>
+    <div class="review-list">
+      <div
+        v-for="q in reviewQuestions"
+        :key="q.id"
+        class="review-item"
+        :class="{ wrong: !q.correct }"
+      >
+        <!-- 左侧：一键加入错题集 -->
+        <button
+          class="add-wq"
+          :class="{ added: addedIds.includes(q.id) }"
+          :disabled="addedIds.includes(q.id)"
+          @click="addToNotebook(q)"
+        >
+          <template v-if="addedIds.includes(q.id)">✓<br />已加入</template>
+          <template v-else>＋<br />错题本</template>
+        </button>
+        <!-- 右侧：题目内容 -->
+        <div class="review-body">
+          <div class="review-head">
+            <span class="wq-type" :class="typeClass(q.type)">{{ q.type }}</span>
+            <small>第 {{ q.no }} 题</small>
+            <span class="review-state" :class="q.correct ? 'right' : 'wrong'">
+              {{ q.correct ? '✓ 答对' : '✕ 答错' }}
+            </span>
+          </div>
+          <h4>{{ q.title }}</h4>
+          <div class="review-answers">
+            <p>
+              <span>我的答案</span>
+              <b :class="q.correct ? 'right' : 'wrong'">{{ q.myAnswer }}</b>
+            </p>
+            <p v-if="!q.correct">
+              <span>正确答案</span>
+              <b class="right">{{ q.correctAnswer }}</b>
+            </p>
+          </div>
+          <p class="review-analysis">{{ q.analysis }}</p>
+        </div>
+      </div>
+    </div>
+    <template #footer>
+      <el-button @click="reviewDialog = false">关闭</el-button>
+      <el-button type="primary" @click="tab = '错题本'; reviewDialog = false">
+        查看错题集 →
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 <style scoped>
 .page-head {
@@ -793,6 +943,138 @@ function typeClass(t: string) {
 .exam-detail strong {
   color: var(--ink);
   font-weight: 500;
+}
+/* ==================== 阅卷结果查看 ==================== */
+.review-summary {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 18px;
+  background: #fafcfb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+.review-score {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--teal);
+}
+.review-score b {
+  font-size: 34px;
+  line-height: 1;
+}
+.review-score span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.review-meta {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.9;
+}
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.review-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.review-item.wrong {
+  border-color: #f0d5bd;
+  background: #fffaf5;
+}
+.add-wq {
+  width: 64px;
+  flex: none;
+  padding: 8px 0;
+  border: 1px solid #b8cfe7;
+  border-radius: 6px;
+  background: var(--mint);
+  color: var(--teal);
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.add-wq:hover:not(:disabled) {
+  border-color: var(--teal);
+}
+.add-wq.added,
+.add-wq:disabled {
+  border-color: var(--teal);
+  background: var(--teal);
+  color: #fff;
+  cursor: default;
+}
+.review-body {
+  flex: 1;
+  min-width: 0;
+}
+.review-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.review-head small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.review-state {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+}
+.review-state.right {
+  color: var(--teal);
+}
+.review-state.wrong {
+  color: #c2410c;
+}
+.review-body h4 {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 8px 0;
+}
+.review-answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.review-answers p {
+  margin: 0;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.review-answers span {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.review-answers b {
+  font-weight: 600;
+}
+.review-answers b.wrong {
+  color: #b45309;
+}
+.review-answers b.right {
+  color: var(--teal);
+}
+.review-analysis {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.7;
 }
 @media (max-width: 600px) {
   .training-tabs button {
