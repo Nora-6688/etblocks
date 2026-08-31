@@ -223,8 +223,10 @@ function openView(q: WrongQuestion) {
   form.value = JSON.parse(JSON.stringify(q)) // 拷贝，避免没保存就污染列表
   questionDialog.value = { visible: true, mode: 'view', id: q.id }
 }
-/** 查看态 → 编辑态 */
-function startEdit() {
+/** 查看态 → 编辑态（可从列表按钮直接进入编辑） */
+function startEdit(q?: WrongQuestion) {
+  if (q) form.value = JSON.parse(JSON.stringify(q))
+  questionDialog.value.id = q?.id ?? questionDialog.value.id
   questionDialog.value.mode = 'edit'
 }
 function closeDialog() {
@@ -314,6 +316,15 @@ function removeImage(imgId: string) {
 function typeClass(t: string) {
   return `wq-${t}`
 }
+/** 短标签（用于方块里）：单选 / 多选 / 判断 / 简答 */
+function typeShortLabel(t: string) {
+  return {
+    单选题: '单选',
+    多选题: '多选',
+    判断题: '判断',
+    简答题: '简答',
+  }[t] || '题'
+}
 </script>
 <template>
   <section class="page-head">
@@ -375,7 +386,7 @@ function typeClass(t: string) {
     <div class="list-head">
       <div>
         <h2>错题集</h2>
-        <span>共 {{ notebookStore.items.length }} 题 · 点击题目查看与编辑，右侧可直接删除</span>
+        <span>共 {{ notebookStore.items.length }} 题 · 点击行查看与编辑，右侧可直接删除</span>
       </div>
       <el-button type="primary" @click="openCreate">＋ 新增错题</el-button>
     </div>
@@ -383,26 +394,21 @@ function typeClass(t: string) {
     <div v-if="!notebookStore.items.length" class="wq-empty">
       <p>错题集还是空的，点右上角「新增错题」收录第一题吧～</p>
     </div>
-    <div v-else class="wq-list">
-      <div
-        v-for="q in notebookStore.items"
-        :key="q.id"
-        class="wq-row"
-        @click="openView(q)"
-      >
-        <span class="wq-type" :class="typeClass(q.type)">{{ q.type }}</span>
-        <div class="wq-row-main">
-          <h3>{{ q.title }}</h3>
-          <small>
-            <template v-if="q.course && q.course !== '未关联课程'">{{ q.course }} · </template
-            >更新于 {{ q.updatedAt
-            }}<template v-if="q.images.length"> · 🖼 {{ q.images.length }} 张图</template>
-          </small>
-        </div>
-        <button class="wq-del" title="从错题集删除" @click.stop="confirmRemove(q.id)">
-          删除
-        </button>
+    <div v-for="q in notebookStore.items" v-else :key="q.id" class="training-row" @click="openView(q)">
+      <div class="row-icon wq-type-icon" :class="typeClass(q.type)">
+        {{ typeShortLabel(q.type) }}
       </div>
+      <div class="row-main">
+        <strong>{{ q.title }}</strong>
+        <small>
+          <template v-if="q.course && q.course !== '未关联课程'"
+            >关联课程：{{ q.course }} · </template
+          >更新于 {{ q.updatedAt
+          }}<template v-if="q.images.length"> · 🖼 {{ q.images.length }} 张图</template>
+        </small>
+      </div>
+      <button @click.stop="startEdit(q)">编辑 →</button>
+      <button class="danger" @click.stop="confirmRemove(q.id)">删除</button>
     </div>
   </section>
 
@@ -741,70 +747,43 @@ function typeClass(t: string) {
   color: var(--muted);
   font-size: 12px;
 }
-.wq-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px 20px 20px;
+/* ==================== 错题集（每行沿用 .training-row 布局）==================== */
+.notebook {
+  padding: 0;
 }
-.wq-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: box-shadow 0.15s, border-color 0.15s;
+.notebook .list-head {
+  padding: 18px 20px;
 }
-.wq-row:hover {
-  box-shadow: 0 6px 18px rgba(31, 67, 115, 0.08);
-  border-color: #b8cfe7;
-}
-.wq-row-main {
-  flex: 1;
-  min-width: 0;
-}
-.wq-row-main h3 {
-  font-size: 13px;
-  line-height: 1.5;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.wq-row-main small {
-  display: block;
+.wq-empty {
+  padding: 46px 20px;
+  text-align: center;
   color: var(--muted);
-  font-size: 10px;
-  margin-top: 4px;
+  font-size: 12px;
 }
-.wq-del {
-  flex: none;
-  padding: 5px 12px;
-  border: 1px solid #f0c9b8;
-  border-radius: 6px;
+/* 错题集行：进入查看态；按钮做 @click.stop 拦截 */
+.notebook .training-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.notebook .training-row:hover {
+  background: #fafcfd;
+}
+/* 左侧方块按题型配色，复用 row-icon 尺寸 */
+.wq-type-icon.wq-单选题 { background: var(--mint); color: var(--teal); }
+.wq-type-icon.wq-多选题 { background: #ece9f7; color: #534ab7; }
+.wq-type-icon.wq-判断题 { background: #def0e0; color: #0f6e56; }
+.wq-type-icon.wq-简答题 { background: #faeeda; color: #b45309; }
+/* 右侧"删除"按钮：红色 outline */
+.training-row button.danger {
+  border-color: #f0c9b8;
   background: #fff5f0;
   color: #c2410c;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s;
 }
-.wq-del:hover {
+.training-row button.danger:hover {
   background: #fde8dc;
   border-color: #e0a488;
 }
-.wq-type {
-  padding: 2px 7px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  background: #dceef2;
-  color: #39748b;
-}
-.wq-多选题 { background: #e3e0f5; color: #534ab7; }
-.wq-判断题 { background: #d8efd9; color: #0f6e56; }
-.wq-简答题 { background: #faeeda; color: #b45309; }
+/* 详情/弹窗里题型小标签（保留原有样式不动）*/
 
 /* 详情/表单弹窗 */
 .wq-detail {
