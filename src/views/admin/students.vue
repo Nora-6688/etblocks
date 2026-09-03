@@ -1,33 +1,30 @@
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import * as XLSX from 'xlsx'
+import { useAdminStore, todayStr, daysSince, EVAL_REMIND_DAYS, type AdminStudent as Student } from '@/stores/admin'
 
-type Student = {
-  name: string
-  phone: string
-  email: string
-  department: string
-  role: string
-  workId: string
-  joined: string
-  completed: string
-  progress: string
-  status: string
-  password: string
-  source: string
-  evaluation: string
+/* 学员档案来自管理端共享 store（工作台待处理事项读同一份） */
+const adminStore = useAdminStore()
+const { students } = storeToRefs(adminStore)
+
+/* 评价状态筛选：支持从工作台待处理事项带 ?eval=待评价 直接进入 */
+const route = useRoute()
+const evalFilter = ref(route.query.eval === '待评价' ? '待评价' : '全部评价')
+
+/* 评价状态三态：已评价 / 待评价 / 逾期未评价（超过 EVAL_REMIND_DAYS 天） */
+type EvalState = 'evaluated' | 'pending' | 'overdue'
+function evalState(student: Student): EvalState {
+  if (student.evaluation.trim()) return 'evaluated'
+  return daysSince(student.evalPendingSince) >= EVAL_REMIND_DAYS ? 'overdue' : 'pending'
 }
-
-const students = ref<Student[]>([
-  { name: 'Bling', phone: '13800001111', email: 'bling@ford.com', department: '中后台', role: '人力总监', workId: 'HR001', joined: '2020.06.18', completed: '6/8', progress: '75%', status: '已关闭', password: '', source: '手动添加', evaluation: '' },
-  { name: 'Tommy', phone: '13800002222', email: 'tommy@ford.com', department: '业务部', role: '业务总监', workId: 'BD001', joined: '2022.03.12', completed: '12/15', progress: '80%', status: '已开通', password: '', source: '手动添加', evaluation: '学习主动性强，业务流程掌握扎实，建议加强客户沟通技巧。' },
-  { name: 'Farry', phone: '13800003333', email: 'farry@ford.com', department: '客服部', role: '文件支持', workId: 'CS001', joined: '2023.05.20', completed: '5/10', progress: '50%', status: '已关闭', password: '', source: '手动添加', evaluation: '' },
-  { name: 'Vikki', phone: '13800004444', email: 'vikki@ford.com', department: '产品部', role: '产品经理', workId: 'PD001', joined: '2021.08.01', completed: '18/20', progress: '90%', status: '已关闭', password: '', source: '手动添加', evaluation: '' },
-  { name: 'Selina', phone: '13800005555', email: 'selina@ford.com', department: '业务部', role: '客户经理', workId: 'BD002', joined: '2024.11.16', completed: '8/12', progress: '67%', status: '已开通', password: '', source: '手动添加', evaluation: '课程完成情况良好。' },
-  { name: 'Solar', phone: '13800006666', email: 'solar@ford.com', department: '商务部', role: '商务专员', workId: 'CM001', joined: '2023.09.08', completed: '7/12', progress: '58%', status: '已开通', password: '', source: '手动添加', evaluation: '' },
-  { name: 'Lily', phone: '13800007777', email: 'lily@ford.com', department: '客服部', role: '客服专员', workId: 'CS002', joined: '2025.01.15', completed: '3/10', progress: '30%', status: '已开通', password: '', source: '手动添加', evaluation: '' },
-])
+function evalStateText(state: EvalState): string {
+  if (state === 'evaluated') return '查看评价'
+  if (state === 'overdue') return '立即评价'
+  return '评 价'
+}
 
 const keyword = ref('')
 const department = ref('全部部门')
@@ -37,16 +34,23 @@ const filteredStudents = computed(() =>
     (student) =>
       student.name.includes(keyword.value) &&
       (department.value === '全部部门' || student.department === department.value) &&
-      (statusFilter.value === '全部状态' || student.status === statusFilter.value),
+      (statusFilter.value === '全部状态' || student.status === statusFilter.value) &&
+      (evalFilter.value === '全部评价' ||
+        (evalFilter.value === '待评价' && !student.evaluation.trim()) ||
+        (evalFilter.value === '已评价' && !!student.evaluation.trim())),
   ),
 )
 
 const review = ref('')
 const reviewStudent = ref('')
 const reviewVisible = ref(false)
-function saveReview() {
+/* 打开的是否是逾期未评价的学员（对话框里给出红色提示） */
+const reviewOverdue = computed(() => {
   const student = students.value.find((item) => item.name === reviewStudent.value)
-  if (student) student.evaluation = review.value
+  return student ? evalState(student) === 'overdue' : false
+})
+function saveReview() {
+  adminStore.saveEvaluation(reviewStudent.value, review.value)
   reviewVisible.value = false
   ElMessage.success(`已保存 ${reviewStudent.value} 的学习评价`)
 }
@@ -121,6 +125,8 @@ function submitManualAdd() {
     password: pwd,
     source: '手动添加',
     evaluation: '',
+    evaluatedAt: '',
+    evalPendingSince: todayStr(),
   }
   students.value.unshift(student)
   ElMessageBox.alert(
@@ -195,6 +201,8 @@ function confirmStudentImport() {
       password: defaultPassword,
       source: '批量导入',
       evaluation: '',
+      evaluatedAt: '',
+      evalPendingSince: todayStr(),
     }
     students.value.unshift(student)
     imported++
@@ -253,6 +261,8 @@ function syncWecom() {
         password: '',
         source: '企业微信同步',
         evaluation: '',
+        evaluatedAt: '',
+        evalPendingSince: todayStr(),
       }
       students.value.unshift(student)
     })
@@ -291,6 +301,10 @@ function syncWecom() {
       <el-select v-model="statusFilter"
         ><el-option label="全部状态" value="全部状态" /><el-option
           label="已开通" value="已开通" /><el-option label="已关闭" value="已关闭"
+      /></el-select>
+      <el-select v-model="evalFilter"
+        ><el-option label="全部评价" value="全部评价" /><el-option
+          label="待评价" value="待评价" /><el-option label="已评价" value="已评价"
       /></el-select>
     </div>
     <table>
@@ -331,7 +345,12 @@ function syncWecom() {
             </button>
           </td>
           <td class="actions">
-            <button class="action-primary" @click="openReview(student)">评价</button>
+            <button
+              class="eval-btn"
+              :class="evalState(student)"
+              :title="evalState(student) === 'overdue' ? '该学员已超过 3 天未评价，请尽快处理' : ''"
+              @click="openReview(student)"
+            >{{ evalStateText(evalState(student)) }}</button>
             <button v-if="student.source !== '企业微信同步'" class="action-remove" @click="removeStudent(student)">移除</button>
             <span v-else class="sync-locked" title="企业微信同步的学员会跟随通讯录自动增减，无需手动移除">同步管理</span>
           </td>
@@ -342,6 +361,7 @@ function syncWecom() {
 
   <!-- 学习评价对话框 -->
   <el-dialog v-model="reviewVisible" :title="`学习评价 - ${reviewStudent}`" width="590px" @close="reviewStudent = ''">
+    <p v-if="reviewOverdue" class="review-overdue-tip">提醒：该学员已进入待评价队列超过 3 天，请尽快完成评价。</p>
     <p class="review-name">评价内容（可输入文字）</p>
     <el-input v-model="review" type="textarea" :rows="4" placeholder="例如：学习主动性强，业务流程掌握扎实，建议加强客户沟通技巧..." />
     <template #footer>
@@ -631,10 +651,31 @@ td small {
   padding: 6px 15px;
   border-radius: 6px;
 }
-.action-primary {
-  border: 1px solid #185fa5;
+/* 评价按钮三态：已评价（灰）/ 待评价（蓝）/ 逾期未评价（红） */
+.eval-btn {
+  border: 1px solid #d5dbe3;
+  background: #fff;
+  color: #6b7684;
+}
+.eval-btn:hover { border-color: #b7c1cc; }
+.eval-btn.pending {
+  border-color: #185fa5;
   background: #185fa5;
   color: #fff;
+}
+.eval-btn.overdue {
+  border-color: #a32d2d;
+  background: #a32d2d;
+  color: #fff;
+}
+.review-overdue-tip {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fcebeb;
+  color: #a32d2d;
+  font-size: 12px;
+  line-height: 1.6;
 }
 .action-remove {
   border: 1px solid #d4c0c0;

@@ -60,14 +60,16 @@ const abilityDimensions = computed(() => {
   courseStore.courses.forEach((c) => {
     const name = c.name
     const full = 100 // 每门课占 100 分
-    let matched = ''
+    let matched: keyof typeof totals | undefined
     if (/流程|规章|制度/.test(name)) matched = 'flow'
     else if (/客户|服务|沟通|谈判/.test(name)) matched = 'comm'
     else if (/产品|行业/.test(name)) matched = 'product'
     else if (/企业|文化|价值观/.test(name)) matched = 'culture'
     if (matched) {
-      totals[matched].max += full
-      if (doneCourses.has(c.id)) totals[matched].score += full
+      const total = totals[matched]
+      if (!total) return
+      total.max += full
+      if (doneCourses.has(c.id)) total.score += full
     }
   })
   return Object.values(totals)
@@ -104,7 +106,7 @@ const recommendedCourses = computed(() => {
   const sorted = hits
     .sort((a, b) => b.weight - a.weight)
     .map((h) => courseStore.getCourseById(h.courseId))
-    .filter(Boolean)
+    .filter((course): course is NonNullable<typeof course> => course !== undefined)
   // 去重
   const seen = new Set<string>()
   return sorted.filter((c) => {
@@ -129,7 +131,7 @@ function progressColor(coverColor: string) {
 
 /* ---------- 消息通知 ---------- */
 const unread = computed(() => notificationStore.unreadCount)
-const notices = computed(() => notificationStore.items.slice(0, 4))
+const notices = computed(() => { notificationStore.ensureInit(); return notificationStore.items.slice(0, 4) })
 function timeAgoLabel(t: string) {
   // 演示数据已是 "今天 09:20" / "08.22" / "刚刚" 这种文案，原样展示
   return t

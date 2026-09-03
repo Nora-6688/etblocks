@@ -1,7 +1,10 @@
 ﻿<script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
+import { useAdminStore } from '@/stores/admin'
 
 type Tab = '题库' | '试卷' | '阅卷列表'
 type QuestionType = '单选题' | '多选题' | '判断题' | '填空题' | '问答题（人工判分）' | '问答题（系统判分）'
@@ -42,7 +45,16 @@ type Paper = {
   pushRecords: PushRecord[]
 }
 
-const tab = ref<Tab>('题库')
+/* 待阅卷 / 已阅数据来自管理端共享 store（工作台待处理事项也读同一份） */
+const adminStore = useAdminStore()
+const { pendingGradings: pendingPapers, markedPapers } = storeToRefs(adminStore)
+
+/* 支持从工作台带 ?tab=阅卷列表 直接进入阅卷页 */
+const route = useRoute()
+const initTab = (['题库', '试卷', '阅卷列表'] as const).includes(route.query.tab as Tab)
+  ? (route.query.tab as Tab)
+  : '题库'
+const tab = ref<Tab>(initTab)
 const markingTab = ref('待阅卷')
 const selectedBank = ref<Bank | null>(null)
 const selectedPaper = ref<Paper | null>(null)
@@ -160,14 +172,6 @@ const papers = ref<Paper[]>([
     { question: { ...emptyQuestion(), title: '业务审批流程中，超过 10 万的合同需要谁审批？', type: '单选题', difficulty: '进阶', course: '业务流程规范' }, score: 15 },
   ], pushRecords: [] },
   { id: 3, name: '规章制度专项测试', audience: '全司通用', count: 20, pass: 70, duration: 30, status: '草稿', questions: [], pushRecords: [] },
-])
-const pendingPapers = ref([
-  { name: '业务知识季度考核', learner: 'Tommy', submitted: '2026.08.26', subjective: 2 },
-  { name: '客服岗位能力测评', learner: 'Farry', submitted: '2026.08.25', subjective: 1 },
-])
-const markedPapers = ref([
-  { name: '新人入职综合考核', learner: 'Selina', score: 92, markedAt: '2026.08.22', paperName: '新人入职综合考核' },
-  { name: '规章制度专项测试', learner: 'Bling', score: 86, markedAt: '2026.08.20', paperName: '规章制度专项测试' },
 ])
 
 const questions = computed(() => selectedBank.value?.questions ?? [])
@@ -444,14 +448,7 @@ function autoMark(pending: { name: string; learner: string; submitted: string; s
   const totalScore = paper?.questions.reduce((s, q) => s + q.score, 0) ?? 100
   const correctRate = 0.82 + Math.random() * 0.12
   const score = Math.round(totalScore * correctRate)
-  markedPapers.value.unshift({
-    name: pending.name,
-    learner: pending.learner,
-    score,
-    markedAt: '2026.08.27',
-    paperName: pending.name,
-  })
-  pendingPapers.value = pendingPapers.value.filter((p) => p !== pending)
+  adminStore.finishGrading(pending, score)
   ElMessage.success(`${pending.learner} 的试卷已自动批改，得分 ${score} 分，成绩提醒已发送给学员`)
 }
 
@@ -486,7 +483,7 @@ function copyShareLink() {
 
 <template>
   <section class="page-header"><div><h1>考试管理</h1><p>题库管理、试卷组卷、阅卷批改</p></div></section>
-  <div class="tabs"><button v-for="item in ['题库','试卷','阅卷列表']" :key="item" :class="{ active: tab === item }" @click="tab = item as Tab; selectedBank = null; selectedPaper = null">{{ item }}<b v-if="item === '阅卷列表'">2</b></button></div>
+  <div class="tabs"><button v-for="item in ['题库','试卷','阅卷列表']" :key="item" :class="{ active: tab === item }" @click="tab = item as Tab; selectedBank = null; selectedPaper = null">{{ item }}<b v-if="item === '阅卷列表'">{{ pendingPapers.length }}</b></button></div>
 
   <template v-if="tab === '题库'">
     <section v-if="!selectedBank" class="content-view">

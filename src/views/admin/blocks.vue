@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useTrackingStore } from '@/stores/tracking'
 type Kind = '课程' | '练习题' | '试卷'
 type Item = { title: string; kind: Kind; department?: string }
+type PushTarget = { name: string; department: string; status: '成功' | '失败'; reason: string }
+type PushRecord = { id: number; target: string; deadline: string; pushedAt: string; targets: PushTarget[] }
 type Block = {
   name: string
   department: string
   description: string
   items: Item[]
-  status: string
   pushedLearners: { name: string; department: string; deadline: string }[]
+  pushRecords: PushRecord[]
 }
 const name = ref('')
 const department = ref('业务部')
@@ -28,12 +31,19 @@ const recipientMode = ref<'组织架构' | '指定学员'>('组织架构')
 const learnerKeyword = ref('')
 const selectedLearners = ref<string[]>([])
 const deadline = ref('')
+const pushLogVisible = ref(false)
+const pushLogBlock = ref<Block | null>(null)
+const trackingVisible = ref(false)
+const trackingBlock = ref<Block | null>(null)
+const retryVisible = ref(false)
+const retryLearners = ref<string[]>([])
 const learners = [
   { name: 'Tommy', department: '业务部' }, { name: 'Selina', department: '业务部' },
   { name: 'Farry', department: '客服部' }, { name: 'Lily', department: '客服部' },
   { name: 'Solar', department: '商务部' }, { name: 'Vikki', department: '产品部' },
   { name: 'Bling', department: '中后台' },
 ]
+const trackingStore = useTrackingStore()
 const organizationLearners = computed(() => pushDepartment.value === '全司不限' ? learners : learners.filter((learner) => learner.department === pushDepartment.value))
 const searchedLearners = computed(() => learners.filter((learner) => learner.name.toLowerCase().includes(learnerKeyword.value.trim().toLowerCase()) || learner.department.includes(learnerKeyword.value.trim())))
 const options: Item[] = [
@@ -61,8 +71,8 @@ const blocks = ref<Block[]>([
       { title: '企业文化入门', kind: '课程' },
       { title: '业务流程规范 - 章节测试', kind: '练习题' },
     ],
-    status: '未推送',
     pushedLearners: [],
+    pushRecords: [],
   },
   {
     name: '客服岗服务能力提升包',
@@ -72,11 +82,11 @@ const blocks = ref<Block[]>([
       { title: '客户服务标准', kind: '课程' },
       { title: '新人入职综合考核', kind: '试卷' },
     ],
-    status: '已推送',
     pushedLearners: [
       { name: 'Farry', department: '客服部', deadline: '2026.09.30' },
       { name: 'Lily', department: '客服部', deadline: '2026.09.30' },
     ],
+    pushRecords: [{ id: 1, target: '客服部', deadline: '2026.09.30', pushedAt: '2026.08.27 10:30', targets: [{ name: 'Farry', department: '客服部', status: '成功', reason: '已送达企业微信，等待学员完成' }, { name: 'Lily', department: '客服部', status: '成功', reason: '已送达企业微信，等待学员完成' }] }],
   },
 ])
 const filteredBlocks = computed(() =>
@@ -110,8 +120,8 @@ function createBlock() {
     department: department.value,
     description: blockDescription.value,
     items: [...selected.value],
-    status: '未推送',
     pushedLearners: [],
+    pushRecords: [],
   })
   name.value = ''
   blockDescription.value = ''
@@ -137,13 +147,16 @@ function confirmAssign() {
   }
   if (assigningBlock.value) {
     const dl = typeof deadline.value === 'string' ? deadline.value : new Date(deadline.value).toISOString().slice(0, 10).replace(/-/g, '.')
+    const targets: PushTarget[] = []
     for (const learnerName of selectedLearners.value) {
       const learner = learners.find((l) => l.name === learnerName)
+      if (learner) targets.push({ name: learnerName, department: learner.department, status: learnerName === 'Bling' ? '失败' : '成功', reason: learnerName === 'Bling' ? '企微通知未送达（账号停用）' : '已送达企业微信，等待学员完成' })
       if (learner && !assigningBlock.value.pushedLearners.some((p) => p.name === learnerName)) {
         assigningBlock.value.pushedLearners.push({ name: learnerName, department: learner.department, deadline: dl })
       }
     }
-    assigningBlock.value.status = '已推送'
+    assigningBlock.value.pushRecords.unshift({ id: Date.now(), target: recipientMode.value === '组织架构' ? pushDepartment.value : `指定 ${targets.length} 人`, deadline: dl, pushedAt: formatNow(), targets })
+    trackingStore.addAssignments(assigningBlock.value.name, formatNow(), targets.filter((target) => target.status === '成功'))
   }
   showAssign.value = false
   pushDepartment.value = '业务部'
@@ -151,7 +164,7 @@ function confirmAssign() {
   selectedLearners.value = []
   deadline.value = ''
   assigningBlock.value = null
-  ElMessage.success('已完成指派')
+  ElMessage.success('已完成推送，可在“推送记录”查看结果')
 }
 function openAssign(block: Block) {
   assigningBlock.value = block
@@ -176,6 +189,37 @@ function addLearner(name: string) {
 }
 function removeLearner(name: string) {
   selectedLearners.value = selectedLearners.value.filter((item) => item !== name)
+}
+function formatNow() {
+  const date = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+function openPushLog(block: Block) {
+  pushLogBlock.value = block
+  pushLogVisible.value = true
+}
+function openTracking(block: Block) {
+  trackingBlock.value = block
+  trackingVisible.value = true
+}
+function openRetry() {
+  const failures = pushLogBlock.value?.pushRecords.flatMap((record) => record.targets.filter((target) => target.status === '失败').map((target) => target.name)) ?? []
+  retryLearners.value = [...new Set(failures)]
+  retryVisible.value = true
+}
+function retryPush() {
+  if (!pushLogBlock.value || !retryLearners.value.length) {
+    ElMessage.warning('请至少选择一位学员')
+    return
+  }
+  const targets = retryLearners.value.map((name) => {
+    const learner = learners.find((item) => item.name === name)
+    return { name, department: learner?.department ?? '-', status: '成功' as const, reason: '重新推送成功，已送达企业微信' }
+  })
+  pushLogBlock.value.pushRecords.unshift({ id: Date.now(), target: `重新推送 ${targets.length} 人`, deadline: pushLogBlock.value.pushRecords[0]?.deadline ?? '-', pushedAt: formatNow(), targets })
+  retryVisible.value = false
+  ElMessage.success('已重新推送，可在记录中查看结果')
 }
 function deleteBlock(block: Block) {
   blocks.value = blocks.value.filter((item) => item !== block)
@@ -359,8 +403,9 @@ function icon(dept: string) {
         </p>
         <span v-for="item in block.items" :key="item.title" class="mini-kind">{{ item.kind }}</span>
       </div>
-      <span class="status" :class="{ pushed: block.status === '已推送' }">{{ block.status }}</span
-      ><button @click="openAssign(block)">推送学员</button
+      <button @click="openAssign(block)">推送学员</button
+      ><button class="push-log" @click="openPushLog(block)">推送记录</button
+      ><button @click="openTracking(block)">学习跟踪</button
       ><button @click="openEditDialog(block)">编辑</button
       ><button @click="deleteBlock(block)">删除</button>
     </article>
@@ -390,6 +435,9 @@ function icon(dept: string) {
     ></el-dialog
   >
   <el-dialog v-model="showAssign" title="推送 Blocks" width="580px" class="assign-dialog"><el-form label-position="top"><el-form-item label="添加方式"><div class="recipient-tabs"><button type="button" :class="{ active: recipientMode === '组织架构' }" @click="recipientMode = '组织架构'">从部门架构添加</button><button type="button" :class="{ active: recipientMode === '指定学员' }" @click="recipientMode = '指定学员'">指定学员</button></div></el-form-item><template v-if="recipientMode === '组织架构'"><el-form-item label="推送部门"><el-select v-model="pushDepartment" style="width:100%"><el-option label="业务部" value="业务部"/><el-option label="客服部" value="客服部"/><el-option label="商务部" value="商务部"/><el-option label="产品部" value="产品部"/><el-option label="中后台" value="中后台"/><el-option label="全司不限" value="全司不限"/></el-select></el-form-item><el-form-item label="推送对象"><div class="learner-picker"><el-checkbox :model-value="learnersForDepartment().every((name) => selectedLearners.includes(name))" @change="toggleAllLearners">全选{{ pushDepartment }}</el-checkbox><div class="learner-options"><button v-for="learner in organizationLearners" :key="learner.name" type="button" class="learner-option" :class="{ added: selectedLearners.includes(learner.name) }" @click="addLearner(learner.name)"><span>{{ learner.name }}<small>{{ learner.department }}</small></span><b>{{ selectedLearners.includes(learner.name) ? '已添加' : '+' }}</b></button></div></div></el-form-item></template><template v-else><el-form-item label="搜索系统内学员"><el-input v-model="learnerKeyword" placeholder="输入姓名或部门搜索" clearable /></el-form-item><div class="search-results"><button v-for="learner in searchedLearners" :key="learner.name" type="button" class="learner-option" :class="{ added: selectedLearners.includes(learner.name) }" @click="addLearner(learner.name)"><span>{{ learner.name }}<small>{{ learner.department }}</small></span><b>{{ selectedLearners.includes(learner.name) ? '已添加' : '+' }}</b></button></div></template><el-form-item label="已选推送对象"><div class="selected-recipients"><span v-if="!selectedLearners.length" class="placeholder">尚未添加学员</span><span v-for="learner in selectedLearners" :key="learner" class="recipient-chip">{{ learner }}<button type="button" @click="removeLearner(learner)">×</button></span></div></el-form-item><el-form-item label="学习截止时间"><el-date-picker v-model="deadline" type="date" style="width:100%" placeholder="选择截止日期"/></el-form-item></el-form><template #footer><el-button @click="showAssign = false">取消</el-button><el-button type="primary" @click="confirmAssign">确认推送</el-button></template></el-dialog>
+  <el-dialog v-model="pushLogVisible" :title="`推送记录 - ${pushLogBlock?.name ?? ''}`" width="760px" class="push-log-dialog"><div v-if="!pushLogBlock?.pushRecords.length" class="empty">该 Blocks 暂无推送记录</div><section v-for="record in pushLogBlock?.pushRecords" :key="record.id" class="push-record"><div class="record-head"><span><strong>{{ record.pushedAt }}</strong>　{{ record.target }}　截止 {{ record.deadline }}</span><span><b class="success-text">成功 {{ record.targets.filter((target) => target.status === '成功').length }}</b>　<b class="fail-text">失败 {{ record.targets.filter((target) => target.status === '失败').length }}</b></span></div><table><thead><tr><th>姓名</th><th>部门</th><th>推送状态</th><th>说明</th></tr></thead><tbody><tr v-for="target in record.targets" :key="target.name"><td>{{ target.name }}</td><td>{{ target.department }}</td><td><b class="delivery-status" :class="target.status === '成功' ? 'success' : 'fail'">{{ target.status }}</b></td><td>{{ target.reason }}</td></tr></tbody></table></section><template #footer><el-button @click="pushLogVisible = false">关闭</el-button><el-button type="primary" @click="openRetry">重新推送</el-button></template></el-dialog>
+  <el-dialog v-model="retryVisible" title="重新推送" width="460px"><el-form label-position="top"><el-form-item label="选择学员"><el-checkbox-group v-model="retryLearners" class="retry-list"><el-checkbox v-for="learner in learners" :key="learner.name" :label="learner.name">{{ learner.name }} <small>{{ learner.department }}</small></el-checkbox></el-checkbox-group></el-form-item></el-form><template #footer><el-button @click="retryVisible = false">取消</el-button><el-button type="primary" @click="retryPush">确认重新推送</el-button></template></el-dialog>
+  <el-dialog v-model="trackingVisible" :title="`学习跟踪 - ${trackingBlock?.name ?? ''}`" width="720px"><div v-if="trackingBlock" class="tracking-summary"><span>已指派 {{ trackingStore.getByBlock(trackingBlock.name).length }} 人</span><span>平均完成率 {{ Math.round(trackingStore.getByBlock(trackingBlock.name).reduce((sum, record) => sum + record.completionRate, 0) / Math.max(trackingStore.getByBlock(trackingBlock.name).length, 1)) }}%</span></div><div v-if="!trackingBlock || !trackingStore.getByBlock(trackingBlock.name).length" class="empty">该 Blocks 暂无学习记录</div><table v-else class="tracking-table"><thead><tr><th>学员</th><th>部门</th><th>指派时间</th><th>学习时长</th><th>完成率</th></tr></thead><tbody><tr v-for="record in trackingStore.getByBlock(trackingBlock.name)" :key="record.id"><td>{{ record.learner }}</td><td>{{ record.department }}</td><td>{{ record.assignedAt }}</td><td>{{ record.learningHours }} 小时</td><td><div class="completion"><i :style="{ width: record.completionRate + '%' }"></i><span>{{ record.completionRate }}%</span></div></td></tr></tbody></table></el-dialog>
   <el-dialog v-model="editDialog" title="编辑 Blocks" width="780px" class="edit-dialog"
     ><div v-if="editingBlock" class="edit-body">
       <div class="edit-info">
@@ -683,10 +731,6 @@ function icon(dept: string) {
   margin-right: 5px;
   font-size: 9px;
 }
-.status {
-  color: var(--orange);
-  font-size: 11px;
-}
 .created-list button {
   border: 0;
   background: transparent;
@@ -694,6 +738,23 @@ function icon(dept: string) {
   cursor: pointer;
   font-size: 11px;
 }
+.push-record { overflow: hidden; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 8px; }
+.push-record:last-child { margin-bottom: 0; }
+.record-head { display: flex; align-items: center; gap: 18px; padding: 12px 15px; background: #fafcfe; color: var(--muted); font-size: 11px; }
+.record-head strong { color: var(--ink); font-size: 13px; }
+.record-head > span:last-child { margin-left: auto; }
+.success-text { color: #0f6e56; font-weight: 600; }
+.fail-text { color: #a32d2d; font-weight: 600; }
+.push-record table { width: 100%; min-width: 0; border-collapse: collapse; }
+.push-record th, .push-record td { padding: 10px 15px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; text-align: left; }
+.push-record th { background: #fff; font-weight: 500; }
+.delivery-status { display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 10px; font-weight: 500; }
+.delivery-status.success { background: #e1f5ee; color: #0f6e56; }
+.delivery-status.fail { background: #fcebeb; color: #a32d2d; }
+.retry-list { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fafcfe; }
+.retry-list :deep(.el-checkbox__label) { color: var(--ink); font-size: 13px; }
+.retry-list small { color: var(--muted); font-size: 11px; }
+.tracking-summary { display: flex; gap: 12px; margin-bottom: 16px; }.tracking-summary span { padding: 6px 10px; border-radius: 5px; background: var(--mint); color: var(--teal); font-size: 12px; }.tracking-table { width: 100%; border-collapse: collapse; }.tracking-table th, .tracking-table td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; font-size: 12px; }.tracking-table th { color: var(--muted); background: #fafcfe; font-weight: 500; }.completion { display: flex; align-items: center; gap: 8px; width: 140px; height: 6px; background: #e9eef3; }.completion i { display: block; height: 6px; background: var(--teal); }.completion span { min-width: 32px; margin-left: 6px; color: var(--teal); font-size: 11px; }
 /* ---------- 编辑 Blocks 对话框 ---------- */
 .edit-info {
   display: flex;

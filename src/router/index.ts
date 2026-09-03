@@ -87,7 +87,7 @@ router.beforeEach((to) => {
   const user = rawUser ? (JSON.parse(rawUser) as { role?: string }) : null
   if (to.path === '/login') return true
   if (!user) return '/login'
-  if (to.path.startsWith('/admin') && user.role !== '管理员') return '/blocks'
+  if (to.path.startsWith('/admin') && user.role !== '管理员') return '/dashboard'
   return true
 })
 

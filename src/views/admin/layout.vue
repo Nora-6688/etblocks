@@ -19,7 +19,7 @@ function logout() {
 <template>
   <div class="admin-shell">
     <aside class="admin-side">
-      <div class="brand"><span>ET</span><strong>blocks</strong><small>ADMIN CONSOLE</small></div>
+      <div class="brand"><span>ET</span><strong>Blocks</strong><small>ADMIN CONSOLE</small></div>
       <div class="side-title">管理端</div>
       <nav>
         <RouterLink v-for="item in items" :key="item.path" :to="item.path" class="item"
@@ -27,7 +27,7 @@ function logout() {
           >{{ item.name }}</RouterLink
         >
       </nav>
-      <RouterLink class="back" to="/blocks">← 返回学员端</RouterLink>
+      <RouterLink class="back" to="/dashboard">← 返回学员端</RouterLink>
     </aside>
     <main>
       <header>

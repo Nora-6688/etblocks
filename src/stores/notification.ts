@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useTodoStore } from './todo'
 import { useHistoryStore } from './history'
 
@@ -101,8 +101,25 @@ function buildInitialFromStores(): NotificationItem[] {
 }
 
 export const useNotificationStore = defineStore('notification', () => {
-  const items = ref<NotificationItem[]>(buildInitialFromStores())
-  const unreadCount = ref(items.value.filter((it) => !it.read).length)
+  const items = ref<NotificationItem[]>([])
+  const initialized = ref(false)
+
+  /** 懒初始化：首次使用时从 todo / history store 推导初始消息 */
+  function ensureInit() {
+    if (initialized.value) return
+    initialized.value = true
+    try {
+      items.value = buildInitialFromStores()
+    } catch {
+      // 如果依赖的 store 尚未就绪，静默跳过，后续 push 仍可正常工作
+      items.value = []
+    }
+  }
+
+  const unreadCount = computed(() => {
+    ensureInit()
+    return items.value.filter((it) => !it.read).length
+  })
 
   /** 追加一条新消息（学完、考试出分、被指派等都走这里），可带来源跳转路由 */
   function push(payload: {
@@ -113,6 +130,7 @@ export const useNotificationStore = defineStore('notification', () => {
     /** 点击消息要跳去的来源页路由 */
     link?: string
   }) {
+    ensureInit()
     const id = 'n' + Date.now()
     items.value.unshift({
       id,
@@ -123,21 +141,20 @@ export const useNotificationStore = defineStore('notification', () => {
       read: false,
       link: payload.link,
     })
-    unreadCount.value = items.value.filter((it) => !it.read).length
     return id
   }
 
   function markRead(id: string) {
+    ensureInit()
     const it = items.value.find((x) => x.id === id)
     if (it && !it.read) {
       it.read = true
-      unreadCount.value = items.value.filter((x) => !x.read).length
     }
   }
   function markAllRead() {
+    ensureInit()
     items.value.forEach((it) => (it.read = true))
-    unreadCount.value = 0
   }
 
-  return { items, unreadCount, push, markRead, markAllRead }
+  return { items, unreadCount, push, markRead, markAllRead, ensureInit }
 })
