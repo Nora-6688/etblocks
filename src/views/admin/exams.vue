@@ -448,8 +448,9 @@ function autoMark(pending: { name: string; learner: string; submitted: string; s
   const totalScore = paper?.questions.reduce((s, q) => s + q.score, 0) ?? 100
   const correctRate = 0.82 + Math.random() * 0.12
   const score = Math.round(totalScore * correctRate)
-  adminStore.finishGrading(pending, score)
-  ElMessage.success(`${pending.learner} 的试卷已自动批改，得分 ${score} 分，成绩提醒已发送给学员`)
+  adminStore.finishGrading(pending, score, paper?.pass ?? 60)
+  const passLine = paper?.pass ?? 60
+  ElMessage.success(`${pending.learner} 的试卷已自动批改，得分 ${score} 分（${score >= passLine ? '达到及格线' : '未达及格线'}），成绩提醒已发送给学员`)
 }
 
 function viewMarkDetail(marked: { name: string; learner: string; score: number }) {

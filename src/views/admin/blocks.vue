@@ -1,19 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { storeToRefs } from 'pinia'
 import { useTrackingStore } from '@/stores/tracking'
+import { useAdminStore, type AdminBlock, type AdminBlockTarget, type AdminPushRecord } from '@/stores/admin'
 type Kind = '课程' | '练习题' | '试卷'
 type Item = { title: string; kind: Kind; department?: string }
-type PushTarget = { name: string; department: string; status: '成功' | '失败'; reason: string }
-type PushRecord = { id: number; target: string; deadline: string; pushedAt: string; targets: PushTarget[] }
-type Block = {
-  name: string
-  department: string
-  description: string
-  items: Item[]
-  pushedLearners: { name: string; department: string; deadline: string }[]
-  pushRecords: PushRecord[]
-}
+type PushTarget = AdminBlockTarget
+type PushRecord = AdminPushRecord
+type Block = AdminBlock
 const name = ref('')
 const department = ref('业务部')
 const listDepartment = ref('全部部门')
@@ -44,6 +39,9 @@ const learners = [
   { name: 'Bling', department: '中后台' },
 ]
 const trackingStore = useTrackingStore()
+const adminStore = useAdminStore()
+/* Blocks 数据来自管理端共享 store（看板"已创建 Blocks"统计也读同一份） */
+const { adminBlocks: blocks } = storeToRefs(adminStore)
 const organizationLearners = computed(() => pushDepartment.value === '全司不限' ? learners : learners.filter((learner) => learner.department === pushDepartment.value))
 const searchedLearners = computed(() => learners.filter((learner) => learner.name.toLowerCase().includes(learnerKeyword.value.trim().toLowerCase()) || learner.department.includes(learnerKeyword.value.trim())))
 const options: Item[] = [
@@ -62,33 +60,6 @@ const filteredOptions = computed(() =>
       (itemKind.value === '全部类型' || item.kind === itemKind.value),
   ),
 )
-const blocks = ref<Block[]>([
-  {
-    name: '新人业务岗 30 天培训计划',
-    department: '业务部',
-    description: '面向业务新人的完整入职学习包。',
-    items: [
-      { title: '企业文化入门', kind: '课程' },
-      { title: '业务流程规范 - 章节测试', kind: '练习题' },
-    ],
-    pushedLearners: [],
-    pushRecords: [],
-  },
-  {
-    name: '客服岗服务能力提升包',
-    department: '客服部',
-    description: '覆盖服务标准与岗位实战能力。',
-    items: [
-      { title: '客户服务标准', kind: '课程' },
-      { title: '新人入职综合考核', kind: '试卷' },
-    ],
-    pushedLearners: [
-      { name: 'Farry', department: '客服部', deadline: '2026.09.30' },
-      { name: 'Lily', department: '客服部', deadline: '2026.09.30' },
-    ],
-    pushRecords: [{ id: 1, target: '客服部', deadline: '2026.09.30', pushedAt: '2026.08.27 10:30', targets: [{ name: 'Farry', department: '客服部', status: '成功', reason: '已送达企业微信，等待学员完成' }, { name: 'Lily', department: '客服部', status: '成功', reason: '已送达企业微信，等待学员完成' }] }],
-  },
-])
 const filteredBlocks = computed(() =>
   blocks.value.filter(
     (block) =>
@@ -115,13 +86,11 @@ function moveItem(index: number, direction: -1 | 1) {
 }
 function createBlock() {
   if (!name.value) return
-  blocks.value.unshift({
+  adminStore.createAdminBlock({
     name: name.value,
     department: department.value,
     description: blockDescription.value,
     items: [...selected.value],
-    pushedLearners: [],
-    pushRecords: [],
   })
   name.value = ''
   blockDescription.value = ''
@@ -222,7 +191,7 @@ function retryPush() {
   ElMessage.success('已重新推送，可在记录中查看结果')
 }
 function deleteBlock(block: Block) {
-  blocks.value = blocks.value.filter((item) => item !== block)
+  adminStore.removeAdminBlock(block)
   ElMessage.success('Blocks 已删除')
 }
 

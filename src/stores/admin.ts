@@ -39,6 +39,33 @@ export type MarkedPaper = {
   score: number
   markedAt: string
   paperName?: string
+  /** 该试卷设定的及格线（分），阅卷时写入，用于看板通过率计算 */
+  pass?: number
+}
+
+/* ---------- 管理端 Blocks（学习包） ---------- */
+
+export type BlockKind = '课程' | '练习题' | '试卷'
+export type AdminBlockItem = { title: string; kind: BlockKind; department?: string }
+export type AdminBlockTarget = { name: string; department: string; status: '成功' | '失败'; reason: string }
+export type AdminPushRecord = { id: number; target: string; deadline: string; pushedAt: string; targets: AdminBlockTarget[] }
+export type AdminBlock = {
+  name: string
+  department: string
+  description: string
+  items: AdminBlockItem[]
+  pushedLearners: { name: string; department: string; deadline: string }[]
+  pushRecords: AdminPushRecord[]
+  /** 创建日期（YYYY.MM.DD），用于看板"本月新增 Blocks"统计 */
+  createdAt: string
+}
+
+/** 判断某个 YYYY.MM.DD 日期是否属于当月 */
+export function isThisMonth(date: string): boolean {
+  if (!date) return false
+  const now = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return date.startsWith(`${now.getFullYear()}.${p(now.getMonth() + 1)}`)
 }
 
 /** 评价超时提醒阈值（天） */
@@ -56,7 +83,7 @@ export function todayStr(): string {
 /** 距离某个 YYYY.MM.DD 过去了几天 */
 export function daysSince(date: string): number {
   if (!date) return 0
-  const [y, m, d] = date.split('.').map(Number)
+  const [y = 0, m = 1, d = 1] = date.split('.').map(Number)
   const then = new Date(y, m - 1, d).getTime()
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
@@ -79,9 +106,38 @@ export const useAdminStore = defineStore('admin', {
       { name: '客服岗位能力测评', learner: 'Farry', submitted: '2026.08.25', subjective: 1 },
     ] as PendingGrading[],
     markedPapers: [
-      { name: '新人入职综合考核', learner: 'Selina', score: 92, markedAt: '2026.08.22', paperName: '新人入职综合考核' },
-      { name: '规章制度专项测试', learner: 'Bling', score: 86, markedAt: '2026.08.20', paperName: '规章制度专项测试' },
+      { name: '新人入职综合考核', learner: 'Selina', score: 92, markedAt: '2026.08.22', paperName: '新人入职综合考核', pass: 60 },
+      { name: '规章制度专项测试', learner: 'Bling', score: 66, markedAt: '2026.08.20', paperName: '规章制度专项测试', pass: 70 },
     ] as MarkedPaper[],
+    adminBlocks: [
+      {
+        name: '新人业务岗 30 天培训计划',
+        department: '业务部',
+        description: '面向业务新人的完整入职学习包。',
+        items: [
+          { title: '企业文化入门', kind: '课程' },
+          { title: '业务流程规范 - 章节测试', kind: '练习题' },
+        ],
+        pushedLearners: [],
+        pushRecords: [],
+        createdAt: '2026.08.18',
+      },
+      {
+        name: '客服岗服务能力提升包',
+        department: '客服部',
+        description: '覆盖服务标准与岗位实战能力。',
+        items: [
+          { title: '客户服务标准', kind: '课程' },
+          { title: '新人入职综合考核', kind: '试卷' },
+        ],
+        pushedLearners: [
+          { name: 'Farry', department: '客服部', deadline: '2026.09.30' },
+          { name: 'Lily', department: '客服部', deadline: '2026.09.30' },
+        ],
+        pushRecords: [{ id: 1, target: '客服部', deadline: '2026.09.30', pushedAt: '2026.08.27 10:30', targets: [{ name: 'Farry', department: '客服部', status: '成功', reason: '已送达企业微信，等待学员完成' }, { name: 'Lily', department: '客服部', status: '成功', reason: '已送达企业微信，等待学员完成' }] }],
+        createdAt: '2026.08.27',
+      },
+    ] as AdminBlock[],
   }),
 
   getters: {
@@ -96,6 +152,21 @@ export const useAdminStore = defineStore('admin', {
     /** 逾期未评价：超过 EVAL_REMIND_DAYS 天仍未填写 */
     overdueEvaluation(): AdminStudent[] {
       return this.pendingEvaluation.filter((s) => daysSince(s.evalPendingSince) >= EVAL_REMIND_DAYS)
+    },
+    /** 本月新录入学员（joined 落在当月） */
+    newStudentsThisMonth(): AdminStudent[] {
+      return this.students.filter((s) => isThisMonth(s.joined))
+    },
+    /** 本月新建 Blocks */
+    newBlocksThisMonth(): AdminBlock[] {
+      return this.adminBlocks.filter((b) => isThisMonth(b.createdAt))
+    },
+    /** 考试通过率：已阅卷中得分 ≥ 该卷及格线的份数占比 */
+    passRate(): { rate: number; passed: number; total: number } {
+      const total = this.markedPapers.length
+      if (!total) return { rate: 0, passed: 0, total: 0 }
+      const passed = this.markedPapers.filter((m) => m.score >= (m.pass ?? 60)).length
+      return { rate: Math.round((passed / total) * 100), passed, total }
     },
   },
 
@@ -113,16 +184,29 @@ export const useAdminStore = defineStore('admin', {
       student.evaluatedAt = text.trim() ? todayStr() : ''
       if (text.trim()) student.evalPendingSince = ''
     },
-    /** 试卷阅卷完成：从待阅卷移入已阅 */
-    finishGrading(pending: PendingGrading, score: number) {
+    /** 试卷阅卷完成：从待阅卷移入已阅，记录该卷及格线 */
+    finishGrading(pending: PendingGrading, score: number, pass?: number) {
       this.markedPapers.unshift({
         name: pending.name,
         learner: pending.learner,
         score,
         markedAt: todayStr(),
         paperName: pending.name,
+        pass,
       })
       this.pendingGradings = this.pendingGradings.filter((p) => p !== pending)
+    },
+    /** 新建 Blocks（管理端），自动记录创建日期 */
+    createAdminBlock(data: { name: string; department: string; description: string; items: AdminBlockItem[] }) {
+      this.adminBlocks.unshift({
+        ...data,
+        pushedLearners: [],
+        pushRecords: [],
+        createdAt: todayStr(),
+      })
+    },
+    removeAdminBlock(block: AdminBlock) {
+      this.adminBlocks = this.adminBlocks.filter((item) => item !== block)
     },
   },
 })

@@ -2,19 +2,26 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTrackingStore } from '@/stores/tracking'
-import { useAdminStore } from '@/stores/admin'
+import { useAdminStore, isThisMonth } from '@/stores/admin'
+import { useCourseStore } from '@/stores/course'
 
 const router = useRouter()
 const trackingStore = useTrackingStore()
 const adminStore = useAdminStore()
+const courseStore = useCourseStore()
 const selectedBlock = ref('')
 const trackingVisible = ref(false)
-const stats = [
-  { label: '学员总数', value: '128', change: '+12', note: '本月新增' },
-  { label: '课程总数', value: '42', change: '+6', note: '本月新增' },
-  { label: '已创建 Blocks', value: '8', change: '+2', note: '本月新增' },
-  { label: '考试通过率', value: '76%', change: '+5%', note: '较上月' },
-]
+/* 四个统计卡片全部来自真实 store，任何新增/删除/阅卷都会自动联动刷新 */
+const stats = computed(() => {
+  const newCourses = courseStore.courses.filter((c) => isThisMonth(c.createdAt)).length
+  const pass = adminStore.passRate
+  return [
+    { label: '学员总数', value: String(adminStore.students.length), delta: `+${adminStore.newStudentsThisMonth.length}`, note: '本月新增' },
+    { label: '课程总数', value: String(courseStore.courses.length), delta: `+${newCourses}`, note: '本月新增' },
+    { label: '已创建 Blocks', value: String(adminStore.adminBlocks.length), delta: `+${adminStore.newBlocksThisMonth.length}`, note: '本月新增' },
+    { label: '考试通过率', value: pass.total ? `${pass.rate}%` : '—', delta: pass.total ? `${pass.passed}/${pass.total}` : '', note: pass.total ? '已达各卷及格线' : '暂无已阅试卷' },
+  ]
+})
 const todoItems = computed(() => {
   const overdue = adminStore.overdueEvaluation.length
   return [
@@ -61,7 +68,7 @@ function openTracking(name: string) {
       <small>{{ stat.label }}</small
       ><strong>{{ stat.value }}</strong
       ><span class="stat-note"
-        ><b>{{ stat.change }}</b> {{ stat.note }}</span
+        ><b v-if="stat.delta">{{ stat.delta }}</b> {{ stat.note }}</span
       >
     </div>
   </div>
