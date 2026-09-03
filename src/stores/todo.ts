@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 
 export type TodoSourceType = 'course' | 'block' | 'assignment'
 export type TodoState = '未开始' | '进行中' | '已完成'
-export type TodoType = '课程' | 'Blocks' | '训练'
+export type TodoType = '课程' | 'Blocks' | '练习' | '试卷' | '训练'
 
 export interface TodoItem {
   /** 待学项唯一 id（自增） */
@@ -31,14 +31,28 @@ export interface TodoItem {
 const initialTodos: TodoItem[] = [
   {
     id: 't1',
+    // 随堂练习：sourceId 对应 stores/paper.ts 里的练习卷 pp1
     sourceType: 'assignment',
-    sourceId: 'assignment-1',
+    sourceId: 'pp1',
     title: '完成课后练习：客户需求洞察',
-    meta: '练习题 · 5 道题',
-    type: '训练',
+    meta: '练习题 · 5 道题 · 20 分钟',
+    type: '练习',
     due: '今天到期',
     state: '进行中',
     progress: 60,
+    coverColor: '#b45309',
+  },
+  {
+    id: 't4',
+    // 管理员推送的考试试卷：sourceId 对应 stores/paper.ts 里的试卷 pe1
+    sourceType: 'assignment',
+    sourceId: 'pe1',
+    title: '新人入职综合考核',
+    meta: '试卷 · 8 题 · 满分 100 · 60 分钟',
+    type: '试卷',
+    due: '2026.09.15 截止',
+    state: '未开始',
+    progress: 0,
     coverColor: '#b45309',
   },
   {

@@ -159,6 +159,28 @@ export const useHistoryStore = defineStore('history', () => {
     return finishedAt
   }
 
+  /** 完成一次考试：往考试记录里加一条，同步从待学移除（管理员指派的试卷） */
+  function finishExam(
+    payload: { examName: string; score: number | '待批阅'; pass: boolean | '待批阅'; usedMinutes: number },
+    todoStore?: ReturnType<typeof useTodoStore>,
+    paperId?: string,
+  ) {
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const finishedAt = `${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+    examRecords.value.unshift({
+      id: 'ef' + Date.now(),
+      examName: payload.examName,
+      finishedAt,
+      score: payload.score,
+      pass: payload.pass,
+      usedMinutes: payload.usedMinutes,
+    })
+    // 试卷是从"待学"点进来的：交卷后把这一项清掉
+    if (paperId) todoStore?.removeBySource('assignment', paperId)
+    return finishedAt
+  }
+
   /** 学习路径状态：综合待学 + 历史 */
   function pathStatus(
     blockId: string,
@@ -198,6 +220,7 @@ export const useHistoryStore = defineStore('history', () => {
     stats,
     finishCourse,
     finishBlock,
+    finishExam,
     pathStatus,
   }
 })

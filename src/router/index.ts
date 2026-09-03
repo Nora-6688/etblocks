@@ -47,6 +47,18 @@ const router = createRouter({
           name: 'training',
           component: () => import('@/views/training/index.vue'),
         },
+        {
+          // 试卷 / 练习卷说明页：从待学内容点进来先看到它
+          path: 'paper/:id',
+          name: 'paper-intro',
+          component: () => import('@/views/training/paper-intro.vue'),
+        },
+        {
+          // 整页答题页：说明页点「开始考试」进入
+          path: 'paper/:id/answer',
+          name: 'paper-answer',
+          component: () => import('@/views/training/paper-answer.vue'),
+        },
         { path: 'profile', name: 'profile', component: () => import('@/views/profile/index.vue') },
       ],
     },

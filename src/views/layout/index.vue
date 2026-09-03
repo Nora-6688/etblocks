@@ -23,11 +23,14 @@ const navGroups = [
     ],
   },
 ]
-const pageTitle = computed(
-  () =>
+const pageTitle = computed(() => {
+  // 试卷说明/答题页归到"课后训练"域下
+  if (route.path.startsWith('/paper')) return '课后训练'
+  return (
     navGroups.flatMap((group) => group.items).find((item) => route.path === item.path)?.name ??
-    '学习看板',
-)
+    '学习看板'
+  )
+})
 function logout() {
   sessionStorage.removeItem('etblocks-user')
   router.push('/login')

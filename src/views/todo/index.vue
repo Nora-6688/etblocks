@@ -3,13 +3,18 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useTodoStore } from '@/stores/todo'
+import { usePaperStore } from '@/stores/paper'
 
 const router = useRouter()
 const todoStore = useTodoStore()
+const paperStore = usePaperStore()
 
 // 让 Vue 把 store 数据当 ref 用，computed 才会响应
 const items = computed(() => todoStore.items)
 const unfinishedCount = computed(() => todoStore.unfinishedCount)
+const assignmentCount = computed(
+  () => items.value.filter((it) => it.sourceType === 'assignment').length,
+)
 
 function openItem(item: (typeof items.value)[number]) {
   // 课程类：先进课程首页（详情页），再进播放页；标注来源是待学，方便原路返回
@@ -22,8 +27,14 @@ function openItem(item: (typeof items.value)[number]) {
     router.push(`/block/${item.sourceId}`)
     return
   }
-  // 训练 / 指派：暂用提示，后续 Phase 4 接后端时补真正的答题页
-  ElMessage.info(`正在打开：${item.title}`)
+  // 练习 / 试卷（管理员指派）：先进试卷说明页，点「开始」再进答题页
+  if (item.sourceType === 'assignment') {
+    if (paperStore.findPaper(item.sourceId)) {
+      router.push({ path: `/paper/${item.sourceId}`, query: { from: 'todo' } })
+    } else {
+      ElMessage.info(`正在打开：${item.title}`)
+    }
+  }
 }
 </script>
 
@@ -46,8 +57,8 @@ function openItem(item: (typeof items.value)[number]) {
     <div v-if="items[0] && items[0].sourceType === 'assignment'" class="notice">
       <span>♧</span>
       <div>
-        <b>你有 1 个新的学习指派</b>
-        <p>「{{ items[0].title }}」由培训管理员指派给你，请在本周内完成。</p>
+        <b>你有 {{ assignmentCount }} 个新的学习指派</b>
+        <p>「{{ items[0].title }}」由培训管理员指派给你，请按时完成。</p>
       </div>
     </div>
     <div class="todo-list">
