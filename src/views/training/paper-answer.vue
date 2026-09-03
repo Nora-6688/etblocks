@@ -187,7 +187,17 @@ function doSubmit(auto: boolean) {
   // 完成后的落库：考试写入学习历史；练习 & 考试都从待学移除
   if (p.kind === '考试试卷') {
     historyStore.finishExam(
-      { examName: p.name, score, pass: score >= (p.pass ?? 0), usedMinutes: result.value.usedMin },
+      {
+        examName: p.name,
+        score,
+        pass: score >= (p.pass ?? 0),
+        usedMinutes: result.value.usedMin,
+        paperId: p.id,
+        totalScore: totalScore.value,
+        passScore: p.pass,
+        questionCount: p.questions.length,
+        correctCount: correct,
+      },
       todoStore,
       p.id,
     )

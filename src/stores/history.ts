@@ -43,6 +43,16 @@ export interface ExamRecord {
   pass: boolean | '待批阅'
   /** 用时（分钟） */
   usedMinutes: number
+  /** 关联试卷 ID（可在个人中心跳回补考/回顾） */
+  paperId?: string
+  /** 试卷满分 */
+  totalScore?: number
+  /** 及格线（无及格线的卷不存） */
+  passScore?: number
+  /** 总题数 */
+  questionCount?: number
+  /** 答对题数 */
+  correctCount?: number
 }
 
 const seedCourses: CourseFinish[] = [
@@ -91,6 +101,10 @@ const seedExams: ExamRecord[] = [
     score: 86,
     pass: true,
     usedMinutes: 42,
+    totalScore: 100,
+    passScore: 60,
+    questionCount: 10,
+    correctCount: 9,
   },
   {
     id: 'ef2',
@@ -99,6 +113,10 @@ const seedExams: ExamRecord[] = [
     score: 72,
     pass: true,
     usedMinutes: 58,
+    totalScore: 100,
+    passScore: 60,
+    questionCount: 8,
+    correctCount: 6,
   },
   {
     id: 'ef3',
@@ -107,6 +125,9 @@ const seedExams: ExamRecord[] = [
     score: '待批阅',
     pass: '待批阅',
     usedMinutes: 15,
+    totalScore: 100,
+    passScore: 60,
+    questionCount: 12,
   },
 ]
 
@@ -161,7 +182,17 @@ export const useHistoryStore = defineStore('history', () => {
 
   /** 完成一次考试：往考试记录里加一条，同步从待学移除（管理员指派的试卷） */
   function finishExam(
-    payload: { examName: string; score: number | '待批阅'; pass: boolean | '待批阅'; usedMinutes: number },
+    payload: {
+      examName: string
+      score: number | '待批阅'
+      pass: boolean | '待批阅'
+      usedMinutes: number
+      paperId?: string
+      totalScore?: number
+      passScore?: number
+      questionCount?: number
+      correctCount?: number
+    },
     todoStore?: ReturnType<typeof useTodoStore>,
     paperId?: string,
   ) {
@@ -175,6 +206,11 @@ export const useHistoryStore = defineStore('history', () => {
       score: payload.score,
       pass: payload.pass,
       usedMinutes: payload.usedMinutes,
+      paperId: payload.paperId ?? paperId,
+      totalScore: payload.totalScore,
+      passScore: payload.passScore,
+      questionCount: payload.questionCount,
+      correctCount: payload.correctCount,
     })
     // 试卷是从"待学"点进来的：交卷后把这一项清掉
     if (paperId) todoStore?.removeBySource('assignment', paperId)

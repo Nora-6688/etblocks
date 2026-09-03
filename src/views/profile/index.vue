@@ -17,6 +17,10 @@ const tab = ref<TabKey>('basic')
 
 const profile = computed(() => userStore.profile)
 const stats = computed(() => historyStore.stats)
+/** 已通过的考试次数（待批阅不计入） */
+const examPassed = computed(
+  () => historyStore.examRecords.filter((e) => e.score !== '待批阅' && e.pass === true).length,
+)
 
 /** 学习路径列表：综合 blocks 数据 + todo + history 推算状态 */
 const pathRows = computed(() =>
@@ -38,6 +42,11 @@ const pathRows = computed(() =>
 
 function enterBlock(id: string) {
   router.push(`/block/${id}`)
+}
+
+/** 历史考试 → 重新进入该卷说明页（可补考 / 回看要求） */
+function goPaper(paperId: string) {
+  router.push(`/paper/${paperId}?from=history`)
 }
 
 const stateMap: Record<string, string> = {
@@ -149,25 +158,47 @@ function stateLabel(s: string) {
 
     <div class="record-block">
       <div class="block-head">
-        <h3>历史考试</h3>
+        <h3>考试记录</h3>
         <span class="count">
-          {{ historyStore.examRecords.length }} 次
+          {{ examPassed }} 次通过 ·
+          <b>{{ historyStore.examRecords.length }}</b> 次已考
           <em v-if="stats.examsPending">· {{ stats.examsPending }} 待批阅</em>
         </span>
       </div>
       <div v-if="historyStore.examRecords.length === 0" class="empty-mini">
-        还没有参加考试，试卷答题后会自动归档在这里。
+        还没有参加考试，试卷交卷判分后会自动归档在这里。
       </div>
       <div v-else class="record-list">
-        <div v-for="row in historyStore.examRecords" :key="row.id" class="record-row">
-          <div>
+        <div v-for="row in historyStore.examRecords" :key="row.id" class="record-row exam-row">
+          <div class="exam-info">
             <b>{{ row.examName }}</b>
-            <small>用时 {{ row.usedMinutes }} 分钟 · 提交于 {{ row.finishedAt }}</small>
+            <small>
+              <template v-if="row.correctCount != null && row.questionCount">
+                答对 {{ row.correctCount }} / {{ row.questionCount }} 题 ·
+              </template>
+              用时 {{ row.usedMinutes }} 分钟 · {{ row.finishedAt }}
+            </small>
           </div>
-          <span class="time">{{ row.finishedAt }}</span>
-          <em class="state" :class="row.score === '待批阅' ? 'pending' : row.pass ? 'done' : 'failed'">
-            {{ row.score === '待批阅' ? '待批阅' : `${row.score}分` }}
-          </em>
+          <div class="exam-score">
+            <template v-if="row.score !== '待批阅'">
+              <b :class="row.pass ? 'pass' : 'fail'">
+                {{ row.score }}<i v-if="row.totalScore"> / {{ row.totalScore }}</i>
+              </b>
+              <small v-if="row.passScore">及格线 {{ row.passScore }} 分</small>
+            </template>
+            <template v-else>
+              <b class="wait">待批阅</b>
+              <small>人工阅卷中</small>
+            </template>
+          </div>
+          <div class="exam-side">
+            <em class="state" :class="row.score === '待批阅' ? 'pending' : row.pass ? 'done' : 'failed'">
+              {{ row.score === '待批阅' ? '待批阅' : row.pass ? '✓ 已通过' : '✕ 未通过' }}
+            </em>
+            <button v-if="row.paperId && row.score !== '待批阅'" class="retake" @click="goPaper(row.paperId)">
+              重新考试
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -406,6 +437,59 @@ function stateLabel(s: string) {
 .state.pending { background: #fff3d6; color: #b45309; }
 .state.failed { background: #fbe7e7; color: #b13838; }
 .empty-mini { color: var(--muted); font-size: 12px; padding: 4px 0; }
+
+/* ===== 考试记录行（成绩单式） ===== */
+.exam-row {
+  grid-template-columns: 1fr 170px 108px;
+}
+.exam-info b { font-size: 13px; }
+.exam-info small {
+  display: block;
+  margin-top: 3px;
+}
+.exam-score {
+  text-align: right;
+}
+.exam-score b {
+  display: block;
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+}
+.exam-score b i {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.exam-score b.pass { color: #128a4b; }
+.exam-score b.fail { color: #c2410c; }
+.exam-score b.wait { color: #b45309; font-size: 15px; }
+.exam-score small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.exam-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.exam-side .state {
+  align-self: flex-end;
+}
+.retake {
+  border: 0;
+  background: transparent;
+  color: var(--teal);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+.retake:hover {
+  text-decoration: underline;
+}
 
 /* ===== 学习路径 ===== */
 .panel-hint { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
