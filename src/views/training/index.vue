@@ -1,82 +1,70 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   useNotebookStore,
-  type WrongImage,
   type WrongQuestion,
   type WrongQuestionType,
 } from '@/stores/notebook'
+import { usePaperStore } from '@/stores/paper'
+import { useHistoryStore, type ExamRecord } from '@/stores/history'
+import { useTodoStore } from '@/stores/todo'
+
 type Tab = '练习题' | '考试试卷' | '错题本'
 const route = useRoute()
+const router = useRouter()
 // 支持从消息通知带 ?tab= 直达对应标签页（例如阅卷完成 → 考试试卷）
 const queryTab = route.query.tab as Tab | undefined
 const tab = ref<Tab>(
   queryTab && ['练习题', '考试试卷', '错题本'].includes(queryTab) ? queryTab : '练习题',
 )
-const exerciseDetail = ref(false)
-const examDetail = ref(false)
-const answer = ref('')
-const submitted = ref(false)
-const exercises = [
-  {
-    name: '企业文化入门 - 随堂练习',
-    course: '企业文化入门',
-    count: 10,
-    status: '已完成',
-    action: '查看',
-  },
-  {
-    name: '业务流程规范 - 章节测试',
-    course: '业务流程规范',
-    count: 15,
-    status: '进行中',
-    action: '继续',
-  },
-  {
-    name: '客户服务标准 - 模拟演练',
-    course: '客户服务标准',
-    count: 8,
-    status: '未开始',
-    action: '开始',
-  },
-]
-const exams = [
-  {
-    name: '新人入职综合考核',
-    source: '管理员指派',
-    count: 50,
-    duration: '60 分钟',
-    deadline: '2026.09.15',
-    status: '未开始',
-  },
-  {
-    name: '业务知识季度考核',
-    source: 'Blocks 内测练',
-    count: 30,
-    duration: '40 分钟',
-    deadline: '2026.09.30',
-    status: '未开始',
-  },
-  {
-    name: 'Q2 服务标准复盘',
-    source: '已完成',
-    count: 20,
-    duration: '30 分钟',
-    deadline: '-',
-    status: '已完成 · 92 分',
-  },
-]
-function openExercise(action: string) {
-  exerciseDetail.value = true
-  submitted.value = action === '查看'
+
+const paperStore = usePaperStore()
+const historyStore = useHistoryStore()
+const todoStore = useTodoStore()
+
+/** 当前还在待学里的 assignment 试卷 id（用来排除/提示，避免学员误以为已完成） */
+const pendingAssignmentIds = computed(() => {
+  const set = new Set<string>()
+  for (const it of todoStore.items) {
+    if (it.sourceType === 'assignment') set.add(it.sourceId)
+  }
+  return set
+})
+
+/** 练习题 tab：历史完成的练习卷（按规则，课后训练里出现的练习一定都是已完成） */
+const practices = computed(() => historyStore.practiceFinishes)
+
+/** 考试试卷 tab：历史考试记录 */
+const examRecords = computed(() => historyStore.examRecords)
+const examPendingCount = computed(
+  () => examRecords.value.filter((e) => e.score === '待批阅').length,
+)
+const examPassedCount = computed(
+  () => examRecords.value.filter((e) => e.score !== '待批阅' && e.pass === true).length,
+)
+
+/** 复用 paper store 的字段补充（关联课程 / 时长 / 截止） */
+function paperMeta(paperId: string | undefined) {
+  if (!paperId) return null
+  const p = paperStore.findPaper(paperId)
+  return p ? { course: p.course, duration: p.duration, deadline: p.deadline, source: p.source } : null
 }
-function submitAnswer() {
-  submitted.value = true
-  ElMessage.success('练习已完成，参考答案已展示')
+
+/** 行内跳转：学员在训练页里看结果时直接进入说明页（练习可回顾、考试可补考） */
+function gotoPaper(exam: ExamRecord) {
+  if (!exam.paperId) return
+  router.push(`/paper/${exam.paperId}?from=history`)
 }
-/* ==================== 阅卷结果查看 ==================== */
+
+/** 练习完成记录 → 伪装的 ExamRecord（仅用于跳转时类型对齐） */
+function gotoPracticePaper(p: { paperId: string; paperName: string; finishedAt: string; score: number; totalScore: number; questionCount: number; correctCount: number; usedMinutes: number }) {
+  if (!p.paperId) return
+  router.push(`/paper/${p.paperId}?from=history`)
+}
+
+/* ==================== 阅卷结果查看弹窗 ==================== */
 interface ReviewQuestion {
   id: string
   no: number
@@ -89,12 +77,17 @@ interface ReviewQuestion {
 }
 
 const reviewDialog = ref(false)
-const reviewExam = ref<{ name: string; status: string } | null>(null)
+const reviewExam = ref<ExamRecord | null>(null)
 const reviewInfo = ref({ score: 0, wrong: 0, submittedAt: '2026.08.28 10:24' })
 /** 本次阅卷里已同步到错题集的映射：阅卷题目 id → 错题集条目 id（再点一次可取消） */
 const addedMap = ref<Record<string, string>>({})
 
-/** 已完成阅卷的演示题目（正式版由后端阅卷接口返回） */
+/**
+ * 演示题库（正式版由后端阅卷接口返回，包含学员真实作答）。
+ * 阅卷结果页靠这套数据展示"我的答案 vs 正确答案 + 解析"，并支持一键入错题本。
+ * 这里保留下来，因为 paper store 只存题目 + 标准答案，不存学员作答，
+ * 等 Phase 4 接后端后这块改成从阅卷接口拉。
+ */
 const reviewQuestions: ReviewQuestion[] = [
   {
     id: 'rq1',
@@ -138,20 +131,20 @@ const reviewQuestions: ReviewQuestion[] = [
   },
 ]
 
-function openExam(exam: { name: string; status: string }) {
-  if (exam.status.includes('已完成')) {
-    // 已完成阅卷：打开阅卷结果查看
-    reviewExam.value = exam
-    reviewInfo.value = {
-      score: Number(exam.status.match(/(\d+)\s*分/)?.[1] ?? 0),
-      wrong: reviewQuestions.filter((q) => !q.correct).length,
-      submittedAt: '2026.08.28 10:24',
-    }
-    addedMap.value = {}
-    reviewDialog.value = true
-  } else {
-    examDetail.value = true
+function openReview(exam: ExamRecord) {
+  // 待批阅的不能进查看阅卷，避免误点
+  if (exam.score === '待批阅') {
+    ElMessage.info('这份试卷还在等待管理员批阅，成绩出来后会同步过来～')
+    return
   }
+  reviewExam.value = exam
+  reviewInfo.value = {
+    score: typeof exam.score === 'number' ? exam.score : 0,
+    wrong: reviewQuestions.filter((q) => !q.correct).length,
+    submittedAt: exam.finishedAt,
+  }
+  addedMap.value = {}
+  reviewDialog.value = true
 }
 
 /** 一键把这道题加入错题集；已加入时再点一次取消 */
@@ -165,7 +158,7 @@ function toggleNotebook(q: ReviewQuestion) {
     const newId = notebookStore.addQuestion({
       title: q.title,
       type: q.type,
-      course: reviewExam.value?.name ?? '未关联课程',
+      course: reviewExam.value?.examName ?? '未关联课程',
       myAnswer: q.myAnswer,
       correctAnswer: q.correctAnswer,
       analysis: q.analysis,
@@ -174,10 +167,6 @@ function toggleNotebook(q: ReviewQuestion) {
     addedMap.value[q.id] = newId
     ElMessage.success('已同步到错题集')
   }
-}
-function beginExam() {
-  examDetail.value = false
-  ElMessage.success('考试已开始')
 }
 
 /* ==================== 错题集 ==================== */
@@ -329,57 +318,92 @@ function typeShortLabel(t: string) {
     <div>
       <div class="overline">PRACTICE CENTER</div>
       <h1>课后训练</h1>
-      <p>练习题、考试试卷和错题本</p>
+      <p>练习题、考试试卷和错题本 · 这里看到的都是已经完成的记录</p>
     </div>
   </section>
   <div class="training-tabs">
     <button :class="{ active: tab === '练习题' }" @click="tab = '练习题'">
-      <b>练习题</b><small>3 项</small></button
+      <b>练习题</b><small>{{ practices.length }} 项已完成</small></button
     ><button :class="{ active: tab === '考试试卷' }" @click="tab = '考试试卷'">
-      <b>考试试卷</b><small>2 项待完成</small></button
+      <b>考试试卷</b><small>{{ examPendingCount ? examPendingCount + ' 待批阅 · ' : '' }}{{ examRecords.length }} 项</small></button
     ><button :class="{ active: tab === '错题本' }" @click="tab = '错题本'">
       <b>错题本</b><small>我的记录</small>
     </button>
   </div>
+
+  <!-- ============ 练习题 tab ============ -->
   <section v-if="tab === '练习题'" class="list-panel">
     <div class="list-head">
       <h2>练习题</h2>
-      <span>按关联课程整理</span>
+      <span>已完成 · 按关联课程整理</span>
     </div>
-    <div v-for="exercise in exercises" :key="exercise.name" class="training-row">
+    <div v-if="practices.length === 0" class="empty-soft">
+      <p>还没有完成过练习。在「待学内容」里完成管理员指派的练习卷后，会自动归档到这里。</p>
+      <el-button type="primary" plain @click="router.push('/todo')">去看待学内容 →</el-button>
+    </div>
+    <div v-for="p in practices" v-else :key="p.id" class="training-row">
       <div class="row-icon">练</div>
       <div class="row-main">
-        <strong>{{ exercise.name }}</strong
-        ><small>关联课程：{{ exercise.course }}</small>
+        <strong>{{ p.paperName }}</strong
+        ><small>关联课程：{{ p.course }} · {{ p.questionCount }} 题 · 完成于 {{ p.finishedAt }} · 用时 {{ p.usedMinutes }} 分钟</small>
       </div>
-      <span class="count">{{ exercise.count }} 题</span
-      ><span
-        class="state"
-        :class="exercise.status === '已完成' ? 'done' : exercise.status === '进行中' ? 'doing' : ''"
-        >{{ exercise.status }}</span
-      ><button @click="openExercise(exercise.action)">{{ exercise.action }} →</button>
+      <div class="score-block practice-score">
+        <b>{{ p.score }}<i> / {{ p.totalScore }}</i></b>
+        <small>答对 {{ p.correctCount }} / {{ p.questionCount }}</small>
+      </div>
+      <button @click="gotoPracticePaper(p)">查看说明页 →</button>
     </div>
   </section>
+
+  <!-- ============ 考试试卷 tab ============ -->
   <section v-else-if="tab === '考试试卷'" class="list-panel">
     <div class="list-head">
       <h2>考试试卷</h2>
-      <span>包含管理员指派和 Blocks 内测练</span>
+      <span>
+        <b>{{ examPassedCount }}</b> 次通过 ·
+        <b>{{ examRecords.length }}</b> 次已考
+        <template v-if="examPendingCount"> · <em>{{ examPendingCount }} 待批阅</em></template>
+      </span>
     </div>
-    <div v-for="exam in exams" :key="exam.name" class="training-row">
+    <div v-if="examRecords.length === 0" class="empty-soft">
+      <p>还没有参加过考试。完成管理员指派的考试后，会自动归档到这里。</p>
+      <el-button type="primary" plain @click="router.push('/todo')">去看待学内容 →</el-button>
+    </div>
+    <div v-for="exam in examRecords" v-else :key="exam.id" class="training-row">
       <div class="row-icon exam-icon">卷</div>
       <div class="row-main">
-        <strong>{{ exam.name }}</strong
-        ><small
-          >{{ exam.source }} · {{ exam.count }} 题 · {{ exam.duration }} · 截止
-          {{ exam.deadline }}</small
-        >
+        <strong>{{ exam.examName }}</strong>
+        <small>
+          {{ exam.totalScore ?? '?' }} 分 ·
+          {{ exam.questionCount ?? '?' }} 题 ·
+          用时 {{ exam.usedMinutes }} 分钟 ·
+          完成于 {{ exam.finishedAt }}
+          <template v-if="paperMeta(exam.paperId)?.deadline"> · 截止 {{ paperMeta(exam.paperId)?.deadline }}</template>
+        </small>
       </div>
-      <span class="state" :class="{ done: exam.status.includes('已完成') }">{{ exam.status }}</span
-      ><button @click="openExam(exam)">
-        {{ exam.status.includes('已完成') ? '查看阅卷' : '开始考试' }} →
+      <div
+        class="score-block"
+        :class="exam.score === '待批阅' ? 'score-pending' : exam.pass ? 'score-pass' : 'score-fail'"
+      >
+        <template v-if="exam.score !== '待批阅'">
+          <b>{{ exam.score }}<i> / {{ exam.totalScore }}</i></b>
+          <small>
+            <template v-if="exam.passScore">及格线 {{ exam.passScore }} 分 · </template>
+            答对 {{ exam.correctCount ?? '?' }} / {{ exam.questionCount ?? '?' }}
+          </small>
+        </template>
+        <template v-else>
+          <b class="pending-text">待批阅</b>
+          <small>含简答题 · 人工阅卷中</small>
+        </template>
+      </div>
+      <button @click="openReview(exam)">
+        {{ exam.score === '待批阅' ? '查看详情' : '查看阅卷' }} →
       </button>
     </div>
   </section>
+
+  <!-- ============ 错题本 tab ============ -->
   <section v-else class="notebook panel">
     <div class="list-head">
       <div>
@@ -512,39 +536,11 @@ function typeShortLabel(t: string) {
       </template>
     </template>
   </el-dialog>
-  <el-dialog v-model="exerciseDetail" title="业务流程规范 - 章节测试" width="520px"
-    ><span class="question-type">单选题 · 第 1 / 15 题</span>
-    <h2 class="question">业务审批流程中，超过 10 万的合同需要谁审批？</h2>
-    <el-radio-group v-model="answer"
-      ><el-radio label="A. 部门负责人" /><el-radio label="B. 分管领导" /><el-radio
-        label="C. 总经理"
-    /></el-radio-group>
-    <div v-if="submitted" class="reference">
-      <b>参考答案：B. 分管领导</b>
-      <p>根据业务流程规范，超过 10 万的合同需要分管领导审批。</p>
-    </div>
-    <template #footer
-      ><el-button @click="exerciseDetail = false">退出</el-button
-      ><el-button type="primary" :disabled="!answer" @click="submitAnswer">{{
-        submitted ? '完成' : '提交答案'
-      }}</el-button></template
-    ></el-dialog
-  >
-  <el-dialog v-model="examDetail" title="新人入职综合考核" width="520px"
-    ><div class="exam-detail">
-      <span>试卷名称</span><strong>新人入职综合考核</strong><span>考试时间</span
-      ><strong>60 分钟 · 共 50 题 · 及格 60 分</strong>
-    </div>
-    <template #footer
-      ><el-button @click="examDetail = false">取消</el-button
-      ><el-button type="primary" @click="beginExam">开始考试</el-button></template
-    ></el-dialog
-  >
 
   <!-- ============ 阅卷结果查看 ============ -->
   <el-dialog
     v-model="reviewDialog"
-    :title="`${reviewExam?.name ?? ''} · 阅卷结果`"
+    :title="`${reviewExam?.examName ?? ''} · 阅卷结果`"
     width="720px"
   >
     <div class="review-summary">
@@ -564,7 +560,6 @@ function typeShortLabel(t: string) {
         class="review-item"
         :class="{ wrong: !q.correct }"
       >
-        <!-- 左侧：题目内容 -->
         <div class="review-body">
           <div class="review-head">
             <span class="wq-type" :class="typeClass(q.type)">{{ q.type }}</span>
@@ -572,7 +567,6 @@ function typeShortLabel(t: string) {
             <span class="review-state" :class="q.correct ? 'right' : 'wrong'">
               {{ q.correct ? '✓ 答对' : '✕ 答错' }}
             </span>
-            <!-- 右侧：一键加入/取消错题集 -->
             <button
               class="add-wq"
               :class="{ added: !!addedMap[q.id] }"
@@ -604,6 +598,7 @@ function typeShortLabel(t: string) {
     </template>
   </el-dialog>
 </template>
+
 <style scoped>
 .page-head {
   margin-bottom: 22px;
@@ -672,6 +667,29 @@ function typeShortLabel(t: string) {
   color: var(--muted);
   font-size: 11px;
 }
+.list-head span b {
+  color: var(--ink);
+  font-weight: 700;
+  margin: 0 2px;
+}
+.list-head span em {
+  color: #b45309;
+  font-style: normal;
+  font-weight: 600;
+}
+.empty-soft {
+  padding: 50px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.empty-soft p {
+  margin: 0;
+}
 .training-row {
   display: flex;
   align-items: center;
@@ -691,6 +709,7 @@ function typeShortLabel(t: string) {
   color: var(--teal);
   font-size: 13px;
   font-weight: 600;
+  flex: none;
 }
 .exam-icon {
   background: #faeeda;
@@ -712,17 +731,69 @@ function typeShortLabel(t: string) {
   font-size: 11px;
   margin-top: 4px;
 }
-.count,
-.state {
-  font-size: 11px;
+
+/* ============ 成绩块（高亮重点）============ */
+.score-block {
+  flex: none;
+  min-width: 140px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #f6f8fa;
+  text-align: right;
+}
+.score-block b {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.score-block b i {
+  font-style: normal;
+  font-size: 13px;
   color: var(--muted);
+  margin-left: 2px;
+  font-weight: 500;
 }
-.state.doing {
-  color: var(--orange);
+.score-block small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
 }
-.state.done {
-  color: var(--teal);
+
+/* 通过：突出色 = 绿松石渐变 + 金边 */
+.score-block.score-pass {
+  background: linear-gradient(135deg, #ecfaf3, #d9f2e3);
+  border-color: #5cb48f;
+  box-shadow: 0 0 0 2px rgba(92, 180, 143, 0.12);
 }
+.score-block.score-pass b {
+  color: #0f6e56;
+}
+.score-pass b i {
+  color: #4a9b78;
+}
+/* 未通过：橙色 */
+.score-block.score-fail {
+  background: #fff5f0;
+  border-color: #e08b5a;
+}
+.score-block.score-fail b {
+  color: #c2410c;
+}
+/* 待批阅：暖黄 */
+.score-block.score-pending {
+  background: #fff8e1;
+  border-color: #f0c97c;
+}
+.score-block.score-pending .pending-text {
+  font-size: 17px;
+  color: #b45309;
+}
+
 .training-row button {
   border: 1px solid #b8cfe7;
   background: var(--mint);
@@ -730,21 +801,9 @@ function typeShortLabel(t: string) {
   padding: 7px 11px;
   cursor: pointer;
   font-size: 11px;
+  flex: none;
 }
 /* ==================== 错题集 ==================== */
-.notebook {
-  padding: 0;
-}
-.notebook .list-head {
-  padding: 18px 20px;
-}
-.wq-empty {
-  padding: 46px 20px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 12px;
-}
-/* ==================== 错题集（每行沿用 .training-row 布局）==================== */
 .notebook {
   padding: 0;
 }
@@ -780,8 +839,6 @@ function typeShortLabel(t: string) {
   background: #fde8dc;
   border-color: #e0a488;
 }
-/* 详情/弹窗里题型小标签（保留原有样式不动）*/
-
 /* 详情/表单弹窗 */
 .wq-detail {
   display: flex;
@@ -909,40 +966,7 @@ function typeShortLabel(t: string) {
 .wq-add-image:hover {
   border-color: var(--teal);
 }
-.question-type {
-  color: var(--teal);
-  font-size: 11px;
-}
-.question {
-  font-size: 16px;
-  margin: 18px 0;
-}
-.el-radio-group {
-  display: grid;
-  gap: 13px;
-}
-.reference {
-  margin-top: 20px;
-  padding: 13px;
-  background: var(--mint);
-  color: var(--teal);
-  font-size: 12px;
-}
-.reference p {
-  color: var(--muted);
-  margin-top: 5px;
-}
-.exam-detail {
-  display: grid;
-  grid-template-columns: 100px 1fr;
-  gap: 15px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.exam-detail strong {
-  color: var(--ink);
-  font-weight: 500;
-}
+
 /* ==================== 阅卷结果查看 ==================== */
 .review-summary {
   display: flex;
@@ -1085,7 +1109,7 @@ function typeShortLabel(t: string) {
   .row-main {
     min-width: calc(100% - 55px);
   }
-  .count {
+  .score-block {
     margin-left: 55px;
   }
   .training-row button {

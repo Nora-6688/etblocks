@@ -69,6 +69,7 @@ function stateLabel(s: string) {
     <div class="heading-meta">
       <span><b>{{ stats.finishedCourses }}</b> 门已学课程</span>
       <span><b>{{ stats.finishedBlocks }}</b> 个 Blocks 已完成</span>
+      <span><b>{{ stats.finishedPractices }}</b> 个练习已完成</span>
       <span><b>{{ stats.examsDone }}</b> 次考试已出分</span>
     </div>
   </section>
@@ -198,6 +199,37 @@ function stateLabel(s: string) {
             <button v-if="row.paperId && row.score !== '待批阅'" class="retake" @click="goPaper(row.paperId)">
               重新考试
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="record-block">
+      <div class="block-head">
+        <h3>练习记录</h3>
+        <span class="count">{{ historyStore.practiceFinishes.length }} 个已完成</span>
+      </div>
+      <div v-if="historyStore.practiceFinishes.length === 0" class="empty-mini">
+        还没有完成过练习卷，做完一份会自动出现在这里。
+      </div>
+      <div v-else class="record-list">
+        <div v-for="row in historyStore.practiceFinishes" :key="row.id" class="record-row exam-row">
+          <div class="exam-info">
+            <b>{{ row.paperName }}</b>
+            <small>
+              关联课程：{{ row.course }} · 答对 {{ row.correctCount }} / {{ row.questionCount }} 题 ·
+              用时 {{ row.usedMinutes }} 分钟 · {{ row.finishedAt }}
+            </small>
+          </div>
+          <div class="exam-score">
+            <b class="pass">
+              {{ row.score }}<i> / {{ row.totalScore }}</i>
+            </b>
+            <small>练习完成</small>
+          </div>
+          <div class="exam-side">
+            <em class="state done">✓ 已完成</em>
+            <button class="retake" @click="goPaper(row.paperId)">查看说明页</button>
           </div>
         </div>
       </div>

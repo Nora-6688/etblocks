@@ -184,7 +184,7 @@ function doSubmit(auto: boolean) {
   }
   submitted.value = true
 
-  // 完成后的落库：考试写入学习历史；练习 & 考试都从待学移除
+  // 完成后的落库：考试写入学习历史；练习也写入学习历史；两者都从待学移除
   if (p.kind === '考试试卷') {
     historyStore.finishExam(
       {
@@ -202,7 +202,20 @@ function doSubmit(auto: boolean) {
       p.id,
     )
   } else {
-    todoStore.removeBySource('assignment', p.id)
+    // 练习卷：没有 pass 字段，直接以客观题判分结果落库，方便课后训练页统计
+    historyStore.finishPractice(
+      {
+        paperId: p.id,
+        paperName: p.name,
+        course: p.course,
+        score,
+        totalScore: totalScore.value,
+        questionCount: p.questions.length,
+        correctCount: correct,
+        usedMinutes: result.value.usedMin,
+      },
+      todoStore,
+    )
   }
   ElMessage.success(auto ? '时间到，已自动交卷并判分' : '交卷成功，成绩已生成')
 }

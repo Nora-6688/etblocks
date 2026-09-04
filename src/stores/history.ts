@@ -55,6 +55,24 @@ export interface ExamRecord {
   correctCount?: number
 }
 
+/**
+ * 已完成的练习卷（管理员指派 / 关联课程随堂练习）。
+ * 练习卷没有及格线，所以不需要 pass 字段；客观题即时判分，score 一定是数字。
+ */
+export interface PracticeFinish {
+  id: string
+  paperId: string
+  paperName: string
+  /** 关联课程 */
+  course: string
+  finishedAt: string
+  score: number
+  totalScore: number
+  questionCount: number
+  correctCount: number
+  usedMinutes: number
+}
+
 const seedCourses: CourseFinish[] = [
   {
     id: 'cf1',
@@ -131,10 +149,27 @@ const seedExams: ExamRecord[] = [
   },
 ]
 
+/** 历史完成的练习卷：让首次打开训练页就有真实数据 */
+const seedPractices: PracticeFinish[] = [
+  {
+    id: 'pf1',
+    paperId: 'pp1',
+    paperName: '客户需求洞察 · 随堂练习',
+    course: '客户服务标准',
+    finishedAt: '2026.08.22 16:08',
+    score: 80,
+    totalScore: 100,
+    questionCount: 5,
+    correctCount: 4,
+    usedMinutes: 14,
+  },
+]
+
 export const useHistoryStore = defineStore('history', () => {
   const courseFinishes = ref<CourseFinish[]>([...seedCourses])
   const blockFinishes = ref<BlockFinish[]>([...seedBlocks])
   const examRecords = ref<ExamRecord[]>([...seedExams])
+  const practiceFinishes = ref<PracticeFinish[]>([...seedPractices])
 
   // 让 Pinia 注入 todo，避免循环引用——通过函数参数注入
   // 调用处：在 play.vue / block-detail.vue 里 useTodoStore() 后透传过来
@@ -217,6 +252,39 @@ export const useHistoryStore = defineStore('history', () => {
     return finishedAt
   }
 
+  /** 完成一次练习卷：写入历史并从待学移除（练习题无及格线，score 是数字） */
+  function finishPractice(
+    payload: {
+      paperId: string
+      paperName: string
+      course: string
+      score: number
+      totalScore: number
+      questionCount: number
+      correctCount: number
+      usedMinutes: number
+    },
+    todoStore?: ReturnType<typeof useTodoStore>,
+  ) {
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const finishedAt = `${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+    practiceFinishes.value.unshift({
+      id: 'pf' + Date.now(),
+      paperId: payload.paperId,
+      paperName: payload.paperName,
+      course: payload.course,
+      finishedAt,
+      score: payload.score,
+      totalScore: payload.totalScore,
+      questionCount: payload.questionCount,
+      correctCount: payload.correctCount,
+      usedMinutes: payload.usedMinutes,
+    })
+    todoStore?.removeBySource('assignment', payload.paperId)
+    return finishedAt
+  }
+
   /** 学习路径状态：综合待学 + 历史 */
   function pathStatus(
     blockId: string,
@@ -245,6 +313,7 @@ export const useHistoryStore = defineStore('history', () => {
   const stats = computed(() => ({
     finishedCourses: courseFinishes.value.length,
     finishedBlocks: blockFinishes.value.length,
+    finishedPractices: practiceFinishes.value.length,
     examsDone: examRecords.value.filter((e) => e.score !== '待批阅').length,
     examsPending: examRecords.value.filter((e) => e.score === '待批阅').length,
   }))
@@ -253,10 +322,12 @@ export const useHistoryStore = defineStore('history', () => {
     courseFinishes,
     blockFinishes,
     examRecords,
+    practiceFinishes,
     stats,
     finishCourse,
     finishBlock,
     finishExam,
+    finishPractice,
     pathStatus,
   }
 })
