@@ -59,6 +59,12 @@ const router = createRouter({
           name: 'paper-answer',
           component: () => import('@/views/training/paper-answer.vue'),
         },
+        {
+          // 练习页：未完成时显示做题页，已完成时显示回顾页；按 from=history 或检测完成记录切换
+          path: 'practice/:id',
+          name: 'practice-page',
+          component: () => import('@/views/training/practice-page.vue'),
+        },
         { path: 'profile', name: 'profile', component: () => import('@/views/profile/index.vue') },
       ],
     },

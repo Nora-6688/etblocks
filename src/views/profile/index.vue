@@ -49,6 +49,11 @@ function goPaper(paperId: string) {
   router.push(`/paper/${paperId}?from=history`)
 }
 
+/** 已完成的练习 → 进入练习回顾页（看本人上一次的作答） */
+function goPractice(practiceId: string) {
+  router.push(`/practice/${practiceId}?from=history`)
+}
+
 const stateMap: Record<string, string> = {
   未生成: '待生成',
   正在学习: '正在学习',
@@ -210,26 +215,24 @@ function stateLabel(s: string) {
         <span class="count">{{ historyStore.practiceFinishes.length }} 个已完成</span>
       </div>
       <div v-if="historyStore.practiceFinishes.length === 0" class="empty-mini">
-        还没有完成过练习卷，做完一份会自动出现在这里。
+        还没有完成过练习，做完一份会自动出现在这里。
       </div>
       <div v-else class="record-list">
-        <div v-for="row in historyStore.practiceFinishes" :key="row.id" class="record-row exam-row">
+        <div v-for="row in historyStore.practiceFinishes" :key="row.id" class="record-row exam-row practice-row" @click="goPractice(row.practiceId)" style="cursor:pointer">
           <div class="exam-info">
-            <b>{{ row.paperName }}</b>
+            <b>{{ row.practiceName }}</b>
             <small>
-              关联课程：{{ row.course }} · 答对 {{ row.correctCount }} / {{ row.questionCount }} 题 ·
-              用时 {{ row.usedMinutes }} 分钟 · {{ row.finishedAt }}
+              关联课程：{{ row.course }} · 共 {{ Object.keys(row.answers).length }} 题作答 ·
+              {{ row.finishedAt }}
             </small>
           </div>
-          <div class="exam-score">
-            <b class="pass">
-              {{ row.score }}<i> / {{ row.totalScore }}</i>
-            </b>
-            <small>练习完成</small>
+          <div class="exam-score practice-meta">
+            <b class="practice-bubble">练习</b>
+            <small>已完成</small>
           </div>
           <div class="exam-side">
             <em class="state done">✓ 已完成</em>
-            <button class="retake" @click="goPaper(row.paperId)">查看说明页</button>
+            <button class="retake" @click.stop="goPractice(row.practiceId)">查看作答 →</button>
           </div>
         </div>
       </div>
@@ -521,6 +524,30 @@ function stateLabel(s: string) {
 }
 .retake:hover {
   text-decoration: underline;
+}
+
+/* ===== 练习记录行（无评分） ===== */
+.practice-row .exam-info b {
+  font-size: 13px;
+}
+.practice-meta {
+  text-align: right;
+}
+.practice-bubble {
+  display: inline-grid;
+  place-items: center;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: var(--mint);
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 600;
+}
+.practice-meta small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
 }
 
 /* ===== 学习路径 ===== */

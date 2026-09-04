@@ -9,7 +9,6 @@ const paperStore = usePaperStore()
 
 const paperId = computed(() => String(route.params.id ?? ''))
 const paper = computed(() => paperStore.findPaper(paperId.value))
-const isExam = computed(() => paper.value?.kind === '考试试卷')
 const totalScore = computed(() => (paper.value ? paperStore.scoreOf(paper.value) : 0))
 const compose = computed(() => (paper.value ? paperStore.compose(paper.value) : []))
 /** 从待学内容进来的，返回键写清楚；手动输入地址的兜底也回待学 */
@@ -30,10 +29,8 @@ function start() {
     <section v-if="paper" class="intro-card">
       <!-- 头部 -->
       <header>
-        <span class="kind-chip" :class="isExam ? 'exam' : 'prac'">{{
-          isExam ? '考试试卷' : '练习卷'
-        }}</span>
-        <p class="overline">{{ isExam ? 'ADMIN EXAMINATION' : 'AFTER-CLASS PRACTICE' }}</p>
+        <span class="kind-chip exam">考试试卷</span>
+        <p class="overline">EXAM PAPER</p>
         <h1>{{ paper.name }}</h1>
         <p class="desc">{{ paper.description }}</p>
         <p class="meta-line">
@@ -75,24 +72,23 @@ function start() {
 
       <!-- 考试/练习说明 -->
       <div class="rules">
-        <h3>{{ isExam ? '考试说明' : '练习说明' }}</h3>
+        <h3>考试说明</h3>
         <ul>
-          <li>点击「{{ isExam ? '开始考试' : '开始练习' }}」后开始计时，倒计时结束系统会自动交卷。</li>
+          <li>点击「开始考试」后开始计时，倒计时结束系统会自动交卷。</li>
           <li>答题时可自由切换题目，右上角会实时显示剩余时间。</li>
           <li>单选题、判断题选择后即作答；多选题需选对全部正确项才得分，少选、错选均不得分。</li>
-          <li>交卷后客观题即时自动判分，逐题展示正确答案与解析。</li>
+          <li>交卷后客观题即时自动判分；含简答题的试卷需要等待管理员人工阅卷。</li>
         </ul>
-        <p v-if="isExam && paper.pass" class="pass-note">
+        <p v-if="paper.pass" class="pass-note">
           得分 ≥ {{ paper.pass }} 分判定为通过；未通过可在次月申请一次免费补考。
         </p>
-        <p v-else class="pass-note">本卷为随堂练习，无及格线，交卷后可直接对照解析复盘。</p>
       </div>
 
       <!-- 底部操作 -->
       <footer class="intro-actions">
         <el-button @click="goBack">稍后再说</el-button>
         <el-button type="primary" size="large" class="start-btn" @click="start">
-          {{ isExam ? '开始考试' : '开始练习' }} →
+          开始考试 →
         </el-button>
       </footer>
     </section>

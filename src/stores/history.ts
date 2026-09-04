@@ -56,21 +56,18 @@ export interface ExamRecord {
 }
 
 /**
- * 已完成的练习卷（管理员指派 / 关联课程随堂练习）。
- * 练习卷没有及格线，所以不需要 pass 字段；客观题即时判分，score 一定是数字。
+ * 已完成的练习（管理员指派 / 关联课程随堂练习）。
+ * 练习无评分、不计时，answers 记录每题的作答（选择题=选项字母串，思考题=文本）。
  */
 export interface PracticeFinish {
   id: string
-  paperId: string
-  paperName: string
+  practiceId: string
+  practiceName: string
   /** 关联课程 */
   course: string
   finishedAt: string
-  score: number
-  totalScore: number
-  questionCount: number
-  correctCount: number
-  usedMinutes: number
+  /** 学员作答：questionId → 作答内容 */
+  answers: Record<string, string>
 }
 
 const seedCourses: CourseFinish[] = [
@@ -149,19 +146,21 @@ const seedExams: ExamRecord[] = [
   },
 ]
 
-/** 历史完成的练习卷：让首次打开训练页就有真实数据 */
+/** 历史完成的练习：让首次打开测练记录页就有真实数据 */
 const seedPractices: PracticeFinish[] = [
   {
     id: 'pf1',
-    paperId: 'pp1',
-    paperName: '客户需求洞察 · 随堂练习',
+    practiceId: 'pp1',
+    practiceName: '客户需求洞察 · 随堂练习',
     course: '客户服务标准',
     finishedAt: '2026.08.22 16:08',
-    score: 80,
-    totalScore: 100,
-    questionCount: 5,
-    correctCount: 4,
-    usedMinutes: 14,
+    answers: {
+      pp1q1: 'B',
+      pp1q2: 'B',
+      pp1q3: 'ABC',
+      pp1q4: '正确',
+      pp1q5: '错误',
+    },
   },
 ]
 
@@ -252,17 +251,13 @@ export const useHistoryStore = defineStore('history', () => {
     return finishedAt
   }
 
-  /** 完成一次练习卷：写入历史并从待学移除（练习题无及格线，score 是数字） */
+  /** 完成一次练习：写入历史并从待学移除（练习无评分，answers 是必填） */
   function finishPractice(
     payload: {
-      paperId: string
-      paperName: string
+      practiceId: string
+      practiceName: string
       course: string
-      score: number
-      totalScore: number
-      questionCount: number
-      correctCount: number
-      usedMinutes: number
+      answers: Record<string, string>
     },
     todoStore?: ReturnType<typeof useTodoStore>,
   ) {
@@ -271,17 +266,13 @@ export const useHistoryStore = defineStore('history', () => {
     const finishedAt = `${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
     practiceFinishes.value.unshift({
       id: 'pf' + Date.now(),
-      paperId: payload.paperId,
-      paperName: payload.paperName,
+      practiceId: payload.practiceId,
+      practiceName: payload.practiceName,
       course: payload.course,
       finishedAt,
-      score: payload.score,
-      totalScore: payload.totalScore,
-      questionCount: payload.questionCount,
-      correctCount: payload.correctCount,
-      usedMinutes: payload.usedMinutes,
+      answers: { ...payload.answers },
     })
-    todoStore?.removeBySource('assignment', payload.paperId)
+    todoStore?.removeBySource('assignment', payload.practiceId)
     return finishedAt
   }
 

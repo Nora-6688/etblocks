@@ -140,7 +140,7 @@ interface ResultItem {
   ok: boolean
   gained: number
 }
-const result = ref<{ items: ResultItem[]; score: number; correct: number; passed: boolean | null; usedMin: number } | null>(null)
+const result = ref<{ items: ResultItem[]; score: number; correct: number; passed: boolean; usedMin: number } | null>(null)
 
 /** 把选项字母/判断词翻译成文字：A → A. xxx；AC → A. xxx、C. xxx */
 function optionText(q: PaperQuestion, letters: string) {
@@ -174,7 +174,7 @@ function doSubmit(auto: boolean) {
   })
   const correct = items.filter((it) => it.ok).length
   const score = items.reduce((s, it) => s + it.gained, 0)
-  const passed = p.kind === '考试试卷' ? score >= (p.pass ?? 0) : null
+  const passed = score >= (p.pass ?? 0)
   result.value = {
     items,
     score,
@@ -184,39 +184,22 @@ function doSubmit(auto: boolean) {
   }
   submitted.value = true
 
-  // 完成后的落库：考试写入学习历史；练习也写入学习历史；两者都从待学移除
-  if (p.kind === '考试试卷') {
-    historyStore.finishExam(
-      {
-        examName: p.name,
-        score,
-        pass: score >= (p.pass ?? 0),
-        usedMinutes: result.value.usedMin,
-        paperId: p.id,
-        totalScore: totalScore.value,
-        passScore: p.pass,
-        questionCount: p.questions.length,
-        correctCount: correct,
-      },
-      todoStore,
-      p.id,
-    )
-  } else {
-    // 练习卷：没有 pass 字段，直接以客观题判分结果落库，方便课后训练页统计
-    historyStore.finishPractice(
-      {
-        paperId: p.id,
-        paperName: p.name,
-        course: p.course,
-        score,
-        totalScore: totalScore.value,
-        questionCount: p.questions.length,
-        correctCount: correct,
-        usedMinutes: result.value.usedMin,
-      },
-      todoStore,
-    )
-  }
+  // 考试落库 + 待学移除（练习已拆到 practice-page.vue，paper 端只走考试分支）
+  historyStore.finishExam(
+    {
+      examName: p.name,
+      score,
+      pass: score >= (p.pass ?? 0),
+      usedMinutes: result.value.usedMin,
+      paperId: p.id,
+      totalScore: totalScore.value,
+      passScore: p.pass,
+      questionCount: p.questions.length,
+      correctCount: correct,
+    },
+    todoStore,
+    p.id,
+  )
   ElMessage.success(auto ? '时间到，已自动交卷并判分' : '交卷成功，成绩已生成')
 }
 
@@ -261,7 +244,7 @@ function goNotebook() {
       <button class="bar-exit" @click="requestExit">‹ 退出</button>
       <div class="bar-title">
         <strong>{{ paper.name }}</strong>
-        <span>{{ paper.kind }} · 共 {{ paper.questions.length }} 题 · 满分 {{ totalScore }} 分</span>
+        <span>考试试卷 · 共 {{ paper.questions.length }} 题 · 满分 {{ totalScore }} 分</span>
       </div>
       <div class="bar-timer" :class="{ low: lowTime }">
         <span>剩余时间</span>
@@ -372,17 +355,16 @@ function goNotebook() {
 
   <!-- ==================== 交卷后的结果页 ==================== -->
   <div v-else-if="paper && result" class="result-page">
-    <div class="result-card" :class="result.passed === null ? 'mode-prac' : result.passed ? 'mode-pass' : 'mode-fail'">
+    <div class="result-card" :class="result.passed ? 'mode-pass' : 'mode-fail'">
       <div class="score-main">
         <b>{{ result.score }}</b>
         <span>得分 · 满分 {{ totalScore }}</span>
       </div>
       <div class="verdict">
-        <em v-if="result.passed === true">✓ 已通过</em>
-        <em v-else-if="result.passed === false">未通过 · 及格线 {{ paper.pass }} 分</em>
-        <em v-else>练习完成</em>
+        <em v-if="result.passed">✓ 已通过</em>
+        <em v-else>未通过 · 及格线 {{ paper.pass }} 分</em>
         <p>答对 {{ result.correct }} / {{ paper.questions.length }} 题 · 用时 {{ result.usedMin }} 分钟</p>
-        <p v-if="result.passed === false" class="sub">别灰心，可在次月申请一次免费补考。</p>
+        <p v-if="!result.passed" class="sub">别灰心，可在次月申请一次免费补考。</p>
       </div>
     </div>
 

@@ -2,12 +2,11 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 /**
- * 学员端收到的试卷 / 练习卷（管理员推送 / Blocks 内测练 / 关联课程的随堂练习）。
- * 每一份卷子带真实题目，说明页、答题页、判分都从这份数据来。
+ * 学员端收到的考试试卷（管理员推送 / Blocks 内考核 / 关联课程的随堂测）。
+ * 练习题已拆到 stores/practice.ts，这里只放"考试"——需要计分、计时、交卷的卷子。
  * Phase 4 接后端后：questions 换成接口返回，交卷调 submit 接口拿判分结果。
  */
 
-export type PaperKind = '考试试卷' | '练习题'
 export type PaperQuestionType = '单选题' | '多选题' | '判断题' | '简答题'
 
 export interface PaperQuestion {
@@ -28,16 +27,15 @@ export interface PaperQuestion {
 export interface Paper {
   id: string
   name: string
-  kind: PaperKind
-  /** 来源说明：管理员指派 / 关联课程 / Blocks 内测练 */
+  /** 来源说明：管理员指派 / 关联课程 / Blocks 内考核 */
   source: string
   /** 关联课程 */
   course: string
   description: string
   /** 考试时长（分钟） */
   duration: number
-  /** 及格分；练习题可省略 */
-  pass?: number
+  /** 及格分 */
+  pass: number
   /** 截止时间文案 */
   deadline?: string
   questions: PaperQuestion[]
@@ -76,7 +74,6 @@ const seedPapers: Paper[] = [
   {
     id: 'pe1',
     name: '新人入职综合考核',
-    kind: '考试试卷',
     source: '管理员指派',
     course: '全员通用',
     description: '覆盖企业文化、规章制度、业务规范与客户服务基础，检验入职必修内容掌握情况。',
@@ -153,61 +150,6 @@ const seedPapers: Paper[] = [
         score: 15,
         correct: '正确',
         analysis: '补考机制为每月一次，须在补考名单确认前主动提出申请，逾期视为放弃当次补考。',
-      },
-    ],
-  },
-  {
-    id: 'pp1',
-    name: '客户需求洞察 · 随堂练习',
-    kind: '练习题',
-    source: '关联课程',
-    course: '客户服务标准',
-    description: '上完《客户服务标准》第 3 节后的随堂练习，训练需求倾听与提问技巧。',
-    duration: 20,
-    deadline: '2026.09.30',
-    questions: [
-      {
-        id: 'pp1q1',
-        type: '单选题',
-        title: '客户抱怨"你们处理得太慢了"，你首先应该？',
-        options: ['解释处理流程本来就耗时', '表达理解并向客户致歉', '把责任推给其他环节', '建议客户下次提前预约'],
-        score: 20,
-        correct: 'B',
-        analysis: '先接住情绪——表达理解与歉意，再同步处理进度和可预期的时限，而不是先辩解。',
-      },
-      {
-        id: 'pp1q2',
-        type: '单选题',
-        title: '挖掘客户真实需求时，更适合采用哪种提问方式？',
-        options: ['连续封闭式提问', '开放式提问并追问细节', '一次性把所有问题问完', '凭经验直接给方案'],
-        score: 20,
-        correct: 'B',
-        analysis: '封闭式连环问容易把客户带偏；开放式提问 + 关键细节追问才能摸清真实诉求。',
-      },
-      {
-        id: 'pp1q3',
-        type: '多选题',
-        title: '以下哪些信号说明客户可能对价格比较敏感？',
-        options: ['反复询问有没有优惠', '主动对比竞品报价', '询问付款周期与方式', '当场签单不再议价'],
-        score: 20,
-        correct: 'ABC',
-        analysis: '频繁问优惠、对比竞品、关心付款周期都是价格敏感信号；当场签单说明价格顾虑已解除。',
-      },
-      {
-        id: 'pp1q4',
-        type: '判断题',
-        title: '记录客户需求时，应尽量使用客户原话，不做主观改写。',
-        score: 20,
-        correct: '正确',
-        analysis: '客户原话最接近真实意图，主观润色容易丢失关键信息，复盘时难以还原需求。',
-      },
-      {
-        id: 'pp1q5',
-        type: '判断题',
-        title: '客户明确拒绝后，不应再尝试任何形式的挽留或跟进。',
-        score: 20,
-        correct: '错误',
-        analysis: '"暂不需要"和"永远不需要"要区分开；合规前提下可与客户约定后续跟进节点，避免死缠烂打。',
       },
     ],
   },

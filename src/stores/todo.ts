@@ -31,15 +31,28 @@ export interface TodoItem {
 const initialTodos: TodoItem[] = [
   {
     id: 't1',
-    // 随堂练习：sourceId 对应 stores/paper.ts 里的练习卷 pp1
+    // 随堂练习：sourceId 对应 stores/practice.ts 里的练习 pp1
     sourceType: 'assignment',
     sourceId: 'pp1',
     title: '完成课后练习：客户需求洞察',
-    meta: '练习题 · 5 道题 · 20 分钟',
+    meta: '练习题 · 5 道题',
     type: '练习',
     due: '今天到期',
     state: '进行中',
     progress: 60,
+    coverColor: '#b45309',
+  },
+  {
+    id: 't5',
+    // 思考题练习：sourceId 对应 stores/practice.ts 里的练习 pp2
+    sourceType: 'assignment',
+    sourceId: 'pp2',
+    title: '客户异议处理 · 思考练习',
+    meta: '练习题 · 3 道思考题',
+    type: '练习',
+    due: '本周到期',
+    state: '未开始',
+    progress: 0,
     coverColor: '#b45309',
   },
   {

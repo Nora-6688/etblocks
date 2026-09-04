@@ -18,14 +18,15 @@ const navGroups = [
       { name: '学习看板', path: '/dashboard', icon: '⌂' },
       { name: '学习列表', path: '/learning', icon: '▦' },
       { name: '待学内容', path: '/todo', icon: '◷', badge: true },
-      { name: '课后训练', path: '/training', icon: '✓' },
+      { name: '测练记录', path: '/training', icon: '✓' },
       { name: '个人中心', path: '/profile', icon: '♙' },
     ],
   },
 ]
 const pageTitle = computed(() => {
-  // 试卷说明/答题页归到"课后训练"域下
-  if (route.path.startsWith('/paper')) return '课后训练'
+  // 试卷说明/答题页 + 练习做题/回顾页都归到"测练记录"域下
+  if (route.path.startsWith('/paper')) return '测练记录'
+  if (route.path.startsWith('/practice')) return '测练记录'
   return (
     navGroups.flatMap((group) => group.items).find((item) => route.path === item.path)?.name ??
     '学习看板'

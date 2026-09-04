@@ -8,6 +8,7 @@ import {
   type WrongQuestionType,
 } from '@/stores/notebook'
 import { usePaperStore } from '@/stores/paper'
+import { usePracticeStore } from '@/stores/practice'
 import { useHistoryStore, type ExamRecord } from '@/stores/history'
 import { useTodoStore } from '@/stores/todo'
 
@@ -21,6 +22,7 @@ const tab = ref<Tab>(
 )
 
 const paperStore = usePaperStore()
+const practiceStore = usePracticeStore()
 const historyStore = useHistoryStore()
 const todoStore = useTodoStore()
 
@@ -33,7 +35,7 @@ const pendingAssignmentIds = computed(() => {
   return set
 })
 
-/** 练习题 tab：历史完成的练习卷（按规则，课后训练里出现的练习一定都是已完成） */
+/** 练习题 tab：历史完成的练习（按规则，测练记录里出现的练习一定都是已完成） */
 const practices = computed(() => historyStore.practiceFinishes)
 
 /** 考试试卷 tab：历史考试记录 */
@@ -58,10 +60,15 @@ function gotoPaper(exam: ExamRecord) {
   router.push(`/paper/${exam.paperId}?from=history`)
 }
 
-/** 练习完成记录 → 伪装的 ExamRecord（仅用于跳转时类型对齐） */
-function gotoPracticePaper(p: { paperId: string; paperName: string; finishedAt: string; score: number; totalScore: number; questionCount: number; correctCount: number; usedMinutes: number }) {
-  if (!p.paperId) return
-  router.push(`/paper/${p.paperId}?from=history`)
+/** 行内跳转：完成记录点进去看本人作答回顾（不再是说明页） */
+function gotoPractice(p: { practiceId: string }) {
+  if (!p.practiceId) return
+  router.push(`/practice/${p.practiceId}?from=history`)
+}
+
+/** 该次完成的作答数 = practice 题目数（学员都答完了才会落库，所以等于 practice 的总题数） */
+function answeredCount(p: { practiceId: string }) {
+  return practiceStore.findPractice(p.practiceId)?.questions.length ?? 0
 }
 
 /* ==================== 阅卷结果查看弹窗 ==================== */
@@ -316,8 +323,8 @@ function typeShortLabel(t: string) {
 <template>
   <section class="page-head">
     <div>
-      <div class="overline">PRACTICE CENTER</div>
-      <h1>课后训练</h1>
+      <div class="overline">TEST & PRACTICE LOG</div>
+      <h1>测练记录</h1>
       <p>练习题、考试试卷和错题本 · 这里看到的都是已经完成的记录</p>
     </div>
   </section>
@@ -338,20 +345,20 @@ function typeShortLabel(t: string) {
       <span>已完成 · 按关联课程整理</span>
     </div>
     <div v-if="practices.length === 0" class="empty-soft">
-      <p>还没有完成过练习。在「待学内容」里完成管理员指派的练习卷后，会自动归档到这里。</p>
+      <p>还没有完成过练习。在「待学内容」里完成管理员指派的练习后，会自动归档到这里。</p>
       <el-button type="primary" plain @click="router.push('/todo')">去看待学内容 →</el-button>
     </div>
     <div v-for="p in practices" v-else :key="p.id" class="training-row">
       <div class="row-icon">练</div>
       <div class="row-main">
-        <strong>{{ p.paperName }}</strong
-        ><small>关联课程：{{ p.course }} · {{ p.questionCount }} 题 · 完成于 {{ p.finishedAt }} · 用时 {{ p.usedMinutes }} 分钟</small>
+        <strong>{{ p.practiceName }}</strong
+        ><small>关联课程：{{ p.course }} · 完成于 {{ p.finishedAt }}</small>
       </div>
-      <div class="score-block practice-score">
-        <b>{{ p.score }}<i> / {{ p.totalScore }}</i></b>
-        <small>答对 {{ p.correctCount }} / {{ p.questionCount }}</small>
+      <div class="practice-count">
+        <b>{{ answeredCount(p) }}</b>
+        <small>道已作答</small>
       </div>
-      <button @click="gotoPracticePaper(p)">查看说明页 →</button>
+      <button @click="gotoPractice(p)">查看作答 →</button>
     </div>
   </section>
 
@@ -838,6 +845,30 @@ function typeShortLabel(t: string) {
 .training-row button.danger:hover {
   background: #fde8dc;
   border-color: #e0a488;
+}
+/* 练习题：作答数块（无评分） */
+.practice-count {
+  flex: none;
+  min-width: 140px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #c5d8ef;
+  background: #f6faff;
+  text-align: right;
+}
+.practice-count b {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--teal);
+}
+.practice-count small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
 }
 /* 详情/表单弹窗 */
 .wq-detail {
