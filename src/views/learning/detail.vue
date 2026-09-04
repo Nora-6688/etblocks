@@ -13,11 +13,12 @@ const course = computed(() => store.getCourseById(String(route.params.id)))
 
 const activeTab = ref<'intro' | 'catalog' | 'comments'>('intro')
 
-/** 来源：从待学进来的 → from=todo；从 Blocks 详情进来的 → from=block:xxx */
+/** 来源：待学 → from=todo；Blocks 详情 → from=block:xxx；看板短板分析推荐 → from=dashboard:gap */
 const from = computed(() => String(route.query.from ?? ''))
 const backLabel = computed(() => {
   if (from.value === 'todo') return '← 返回待学内容'
   if (from.value.startsWith('block:')) return '← 返回 Blocks'
+  if (from.value === 'dashboard:gap') return '← 返回能力短板分析'
   return '← 返回学习列表'
 })
 const isInTodo = computed(
@@ -48,6 +49,7 @@ function startLearning() {
 function goBack() {
   if (from.value === 'todo') router.push('/todo')
   else if (from.value.startsWith('block:')) router.push(`/block/${from.value.slice(6)}`)
+  else if (from.value === 'dashboard:gap') router.push({ path: '/dashboard', hash: '#ability-gap' })
   else router.push('/learning')
 }
 

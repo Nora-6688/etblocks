@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { useHistoryStore } from '@/stores/history'
@@ -10,6 +10,7 @@ import { useCourseStore } from '@/stores/course'
 import { useNotificationStore } from '@/stores/notification'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const historyStore = useHistoryStore()
 const todoStore = useTodoStore()
@@ -152,6 +153,20 @@ function openNotice(item: { id: string; link?: string }) {
   notificationStore.markRead(item.id)
   if (item.link) router.push(item.link)
 }
+
+/* ---------- 从课程详情返回：定位到能力短板分析 ---------- */
+/** 推荐课程进入详情再返回时带 #ability-gap 锚点，挂载后平滑滚动到能力短板分析区块 */
+onMounted(() => {
+  if (route.hash !== '#ability-gap') return
+  nextTick(() => {
+    document.getElementById('ability-gap')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+})
+
+/** 点推荐课程去学习：记录来源，返回时回到能力短板分析 */
+function openRecommended(id: string) {
+  router.push({ path: `/course/${id}`, query: { from: 'dashboard:gap' } })
+}
 </script>
 
 <template>
@@ -255,7 +270,7 @@ function openNotice(item: { id: string; link?: string }) {
     </div>
 
     <!-- ② 能力短板分析 + 课程推荐 -->
-    <div class="ability-card panel">
+    <div id="ability-gap" class="ability-card panel">
       <div class="panel-head">
         <div>
           <p class="eyebrow">ABILITY GAP ANALYSIS</p>
@@ -294,7 +309,7 @@ function openNotice(item: { id: string; link?: string }) {
               <small>{{ c.category }} · {{ c.duration }}</small>
               <h4>{{ c.name }}</h4>
               <p>{{ c.description }}</p>
-              <el-button size="small" type="primary" link @click="router.push(`/course/${c.id}`)">
+              <el-button size="small" type="primary" link @click="openRecommended(c.id)">
                 开始学习 →
               </el-button>
             </div>
