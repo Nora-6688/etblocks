@@ -24,9 +24,8 @@ const navGroups = [
   },
 ]
 const pageTitle = computed(() => {
-  // 试卷说明/答题页 + 练习做题/回顾页都归到"测练记录"域下
+  // 试卷说明/答题页都归到"测练记录"域下
   if (route.path.startsWith('/paper')) return '测练记录'
-  if (route.path.startsWith('/practice')) return '测练记录'
   return (
     navGroups.flatMap((group) => group.items).find((item) => route.path === item.path)?.name ??
     '学习看板'

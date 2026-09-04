@@ -70,7 +70,7 @@ function start() {
         </div>
       </div>
 
-      <!-- 考试/练习说明 -->
+      <!-- 考试说明 -->
       <div class="rules">
         <h3>考试说明</h3>
         <ul>

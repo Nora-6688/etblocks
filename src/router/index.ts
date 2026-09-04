@@ -48,7 +48,7 @@ const router = createRouter({
           component: () => import('@/views/training/index.vue'),
         },
         {
-          // 试卷 / 练习卷说明页：从待学内容点进来先看到它
+          // 试卷说明页：从待学内容点进来先看到它
           path: 'paper/:id',
           name: 'paper-intro',
           component: () => import('@/views/training/paper-intro.vue'),
@@ -58,12 +58,6 @@ const router = createRouter({
           path: 'paper/:id/answer',
           name: 'paper-answer',
           component: () => import('@/views/training/paper-answer.vue'),
-        },
-        {
-          // 练习页：未完成时显示做题页，已完成时显示回顾页；按 from=history 或检测完成记录切换
-          path: 'practice/:id',
-          name: 'practice-page',
-          component: () => import('@/views/training/practice-page.vue'),
         },
         { path: 'profile', name: 'profile', component: () => import('@/views/profile/index.vue') },
       ],

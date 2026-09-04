@@ -8,21 +8,19 @@ import {
   type WrongQuestionType,
 } from '@/stores/notebook'
 import { usePaperStore } from '@/stores/paper'
-import { usePracticeStore } from '@/stores/practice'
 import { useHistoryStore, type ExamRecord } from '@/stores/history'
 import { useTodoStore } from '@/stores/todo'
 
-type Tab = '练习题' | '考试试卷' | '错题本'
+type Tab = '考试试卷' | '错题本'
 const route = useRoute()
 const router = useRouter()
 // 支持从消息通知带 ?tab= 直达对应标签页（例如阅卷完成 → 考试试卷）
 const queryTab = route.query.tab as Tab | undefined
 const tab = ref<Tab>(
-  queryTab && ['练习题', '考试试卷', '错题本'].includes(queryTab) ? queryTab : '练习题',
+  queryTab && ['考试试卷', '错题本'].includes(queryTab) ? queryTab : '考试试卷',
 )
 
 const paperStore = usePaperStore()
-const practiceStore = usePracticeStore()
 const historyStore = useHistoryStore()
 const todoStore = useTodoStore()
 
@@ -34,9 +32,6 @@ const pendingAssignmentIds = computed(() => {
   }
   return set
 })
-
-/** 练习题 tab：历史完成的练习（按规则，测练记录里出现的练习一定都是已完成） */
-const practices = computed(() => historyStore.practiceFinishes)
 
 /** 考试试卷 tab：历史考试记录 */
 const examRecords = computed(() => historyStore.examRecords)
@@ -54,21 +49,10 @@ function paperMeta(paperId: string | undefined) {
   return p ? { course: p.course, duration: p.duration, deadline: p.deadline, source: p.source } : null
 }
 
-/** 行内跳转：学员在训练页里看结果时直接进入说明页（练习可回顾、考试可补考） */
+/** 行内跳转：学员在训练页里看结果时直接进入说明页（考试可补考） */
 function gotoPaper(exam: ExamRecord) {
   if (!exam.paperId) return
   router.push(`/paper/${exam.paperId}?from=history`)
-}
-
-/** 行内跳转：完成记录点进去看本人作答回顾（不再是说明页） */
-function gotoPractice(p: { practiceId: string }) {
-  if (!p.practiceId) return
-  router.push(`/practice/${p.practiceId}?from=history`)
-}
-
-/** 该次完成的作答数 = practice 题目数（学员都答完了才会落库，所以等于 practice 的总题数） */
-function answeredCount(p: { practiceId: string }) {
-  return practiceStore.findPractice(p.practiceId)?.questions.length ?? 0
 }
 
 /* ==================== 阅卷结果查看弹窗 ==================== */
@@ -325,45 +309,19 @@ function typeShortLabel(t: string) {
     <div>
       <div class="overline">TEST & PRACTICE LOG</div>
       <h1>测练记录</h1>
-      <p>练习题、考试试卷和错题本 · 这里看到的都是已经完成的记录</p>
+      <p>考试试卷和错题本 · 这里看到的都是已经完成的记录</p>
     </div>
   </section>
   <div class="training-tabs">
-    <button :class="{ active: tab === '练习题' }" @click="tab = '练习题'">
-      <b>练习题</b><small>{{ practices.length }} 项已完成</small></button
-    ><button :class="{ active: tab === '考试试卷' }" @click="tab = '考试试卷'">
+    <button :class="{ active: tab === '考试试卷' }" @click="tab = '考试试卷'">
       <b>考试试卷</b><small>{{ examPendingCount ? examPendingCount + ' 待批阅 · ' : '' }}{{ examRecords.length }} 项</small></button
     ><button :class="{ active: tab === '错题本' }" @click="tab = '错题本'">
       <b>错题本</b><small>我的记录</small>
     </button>
   </div>
 
-  <!-- ============ 练习题 tab ============ -->
-  <section v-if="tab === '练习题'" class="list-panel">
-    <div class="list-head">
-      <h2>练习题</h2>
-      <span>已完成 · 按关联课程整理</span>
-    </div>
-    <div v-if="practices.length === 0" class="empty-soft">
-      <p>还没有完成过练习。在「待学内容」里完成管理员指派的练习后，会自动归档到这里。</p>
-      <el-button type="primary" plain @click="router.push('/todo')">去看待学内容 →</el-button>
-    </div>
-    <div v-for="p in practices" v-else :key="p.id" class="training-row">
-      <div class="row-icon">练</div>
-      <div class="row-main">
-        <strong>{{ p.practiceName }}</strong
-        ><small>关联课程：{{ p.course }} · 完成于 {{ p.finishedAt }}</small>
-      </div>
-      <div class="practice-count">
-        <b>{{ answeredCount(p) }}</b>
-        <small>道已作答</small>
-      </div>
-      <button @click="gotoPractice(p)">查看作答 →</button>
-    </div>
-  </section>
-
   <!-- ============ 考试试卷 tab ============ -->
-  <section v-else-if="tab === '考试试卷'" class="list-panel">
+  <section v-if="tab === '考试试卷'" class="list-panel">
     <div class="list-head">
       <h2>考试试卷</h2>
       <span>
@@ -845,30 +803,6 @@ function typeShortLabel(t: string) {
 .training-row button.danger:hover {
   background: #fde8dc;
   border-color: #e0a488;
-}
-/* 练习题：作答数块（无评分） */
-.practice-count {
-  flex: none;
-  min-width: 140px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid #c5d8ef;
-  background: #f6faff;
-  text-align: right;
-}
-.practice-count b {
-  display: block;
-  font-size: 22px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-  color: var(--teal);
-}
-.practice-count small {
-  display: block;
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 10px;
 }
 /* 详情/表单弹窗 */
 .wq-detail {

@@ -4,12 +4,10 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useTodoStore } from '@/stores/todo'
 import { usePaperStore } from '@/stores/paper'
-import { usePracticeStore } from '@/stores/practice'
 
 const router = useRouter()
 const todoStore = useTodoStore()
 const paperStore = usePaperStore()
-const practiceStore = usePracticeStore()
 
 // 让 Vue 把 store 数据当 ref 用，computed 才会响应
 const items = computed(() => todoStore.items)
@@ -29,16 +27,8 @@ function openItem(item: (typeof items.value)[number]) {
     router.push(`/block/${item.sourceId}`)
     return
   }
-  // 练习 / 试卷（管理员指派）：练习直接进练习页；试卷先看说明页
+  // 试卷（管理员指派）：先看说明页
   if (item.sourceType === 'assignment') {
-    if (item.type === '练习') {
-      if (practiceStore.findPractice(item.sourceId)) {
-        router.push({ path: `/practice/${item.sourceId}`, query: { from: 'todo' } })
-      } else {
-        ElMessage.info(`正在打开：${item.title}`)
-      }
-      return
-    }
     if (paperStore.findPaper(item.sourceId)) {
       router.push({ path: `/paper/${item.sourceId}`, query: { from: 'todo' } })
     } else {

@@ -184,7 +184,7 @@ function doSubmit(auto: boolean) {
   }
   submitted.value = true
 
-  // 考试落库 + 待学移除（练习已拆到 practice-page.vue，paper 端只走考试分支）
+  // 考试落库 + 待学移除
   historyStore.finishExam(
     {
       examName: p.name,
