@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus'
 import { storeToRefs } from 'pinia'
 import { useTrackingStore } from '@/stores/tracking'
 import { useAdminStore, type AdminBlock, type AdminBlockTarget, type AdminPushRecord } from '@/stores/admin'
-type Kind = '课程' | '练习题' | '试卷'
+type Kind = '课程' | '试卷'
 type Item = { title: string; kind: Kind; department?: string }
 type PushTarget = AdminBlockTarget
 type PushRecord = AdminPushRecord
@@ -48,8 +48,6 @@ const options: Item[] = [
   { title: '企业文化入门', kind: '课程', department: '共享' },
   { title: '业务流程规范', kind: '课程', department: '业务部' },
   { title: '客户服务标准', kind: '课程', department: '客服部' },
-  { title: '业务流程规范 - 章节测试', kind: '练习题', department: '业务部' },
-  { title: '客户服务标准 - 模拟演练', kind: '练习题', department: '客服部' },
   { title: '新人入职综合考核', kind: '试卷', department: '共享' },
 ]
 const filteredOptions = computed(() =>
@@ -302,7 +300,7 @@ function icon(dept: string) {
         ><el-select v-model="itemKind" placeholder="内容类型"
           ><el-option label="全部类型" value="全部类型" /><el-option
             label="课程"
-            value="课程" /><el-option label="练习题" value="练习题" /><el-option
+            value="课程" /><el-option
             label="试卷"
             value="试卷"
         /></el-select>
@@ -370,7 +368,7 @@ function icon(dept: string) {
             · {{ block.description }}</span
           >
         </p>
-        <span v-for="item in block.items" :key="item.title" class="mini-kind">{{ item.kind }}</span>
+        <span v-for="item in block.items" :key="item.title" class="mini-kind" :class="item.kind">{{ item.kind }}</span>
       </div>
       <button @click="openAssign(block)">推送学员</button
       ><button class="push-log" @click="openPushLog(block)">推送记录</button
@@ -439,7 +437,7 @@ function icon(dept: string) {
             ><el-select v-model="editItemKind" placeholder="内容类型"
               ><el-option label="全部类型" value="全部类型" /><el-option
                 label="课程"
-                value="课程" /><el-option label="练习题" value="练习题" /><el-option
+                value="课程" /><el-option
                 label="试卷"
                 value="试卷"
             /></el-select>
@@ -590,13 +588,8 @@ function icon(dept: string) {
   color: var(--teal);
   font-size: 10px;
 }
-.kind.练习题,
-.mini-kind:nth-child(2) {
-  background: #eeedfe;
-  color: #534ab7;
-}
 .kind.试卷,
-.mini-kind:nth-child(3) {
+.mini-kind.试卷 {
   background: #faeeda;
   color: #b45309;
 }

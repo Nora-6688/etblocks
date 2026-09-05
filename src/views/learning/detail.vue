@@ -147,13 +147,6 @@ function addToTodo() {
             <small>5 分钟 · 图文</small>
           </div>
         </div>
-        <div class="chapter">
-          <i>4</i>
-          <div>
-            <b>随堂练习</b>
-            <small>10 分钟 · 练习题</small>
-          </div>
-        </div>
       </div>
       <div v-else class="comments-panel">
         <div class="comment-item">

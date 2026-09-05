@@ -45,7 +45,7 @@ export type MarkedPaper = {
 
 /* ---------- 管理端 Blocks（学习包） ---------- */
 
-export type BlockKind = '课程' | '练习题' | '试卷'
+export type BlockKind = '课程' | '试卷'
 export type AdminBlockItem = { title: string; kind: BlockKind; department?: string }
 export type AdminBlockTarget = { name: string; department: string; status: '成功' | '失败'; reason: string }
 export type AdminPushRecord = { id: number; target: string; deadline: string; pushedAt: string; targets: AdminBlockTarget[] }
@@ -116,7 +116,8 @@ export const useAdminStore = defineStore('admin', {
         description: '面向业务新人的完整入职学习包。',
         items: [
           { title: '企业文化入门', kind: '课程' },
-          { title: '业务流程规范 - 章节测试', kind: '练习题' },
+          { title: '业务流程规范', kind: '课程' },
+          { title: '新人入职综合考核', kind: '试卷' },
         ],
         pushedLearners: [],
         pushRecords: [],

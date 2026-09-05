@@ -31,7 +31,7 @@ const contents = computed<ContentEntry[]>(() => {
   return block.value.contents.map((name) => {
     const c = courseStore.courses.find((x) => x.name === name)
     if (c) return { name, kind: '课程', courseId: c.id, meta: `${c.type} · ${c.duration}` }
-    return { name, kind: '测练', meta: '练习 / 试卷' }
+    return { name, kind: '测练', meta: '试卷' }
   })
 })
 

@@ -59,7 +59,7 @@ const initialTodos: TodoItem[] = [
     sourceType: 'block',
     sourceId: 'b1',
     title: '新人业务岗 30 天培训计划',
-    meta: 'Blocks · 3 门课程 · 1 项练习',
+    meta: 'Blocks · 2 门课程 · 1 项测练',
     type: 'Blocks',
     due: '2026.08.28',
     state: '未开始',
